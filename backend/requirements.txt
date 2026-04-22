@@ -1,13 +1,288 @@
+# ============================================================================
+# x1mvp Data Engineering Portfolio - Dependencies
+# Version: 2.0.0
+# Environment: Production
+# Last Updated: 2026-01-15
+# ============================================================================
+
+# === CORE FRAMEWORK ===
+# Web framework for high-performance APIs
 fastapi==0.112.0
 uvicorn[standard]==0.30.0
-google-cloud-aiplatform==1.52.0      # Vertex AI embeddings
-openai==1.42.0                     # optional – you can delete if using only Vertex AI
+# ASGI server with hot reload, SSL, and monitoring
+starlette==0.37.2
+
+# === DATABASE & VECTOR SEARCH ===
+# Async PostgreSQL driver for high-performance database operations
 asyncpg==0.29.0
+# Vector similarity search extension for PostgreSQL
 pgvector==0.2.4
+# SQLAlchemy core for database modeling (async compatible)
+sqlalchemy[asyncio]==2.0.31
+# Database migrations and management
+alembic==1.13.2
+# Connection pooling for async database operations
+asyncpg-pool==0.1.0
+
+# === MACHINE LEARNING & AI ===
+# Google Cloud Vertex AI for embeddings and ML services
+google-cloud-aiplatform==1.52.0
+# OpenAI API client for GPT models and embeddings
+openai==1.42.0
+# Numerical computing and array operations
 numpy==2.1.1
-joblib==1.4.2
+# XGBoost for gradient boosting models
 xgboost==2.0.3
+# SHAP for model explainability and interpretability
 shap==0.45.1
+# Scikit-learn for traditional ML algorithms
 scikit-learn==1.5.1
+# ONNX Runtime for optimized model inference
 onnxruntime==1.19.2
+# Job serialization and parallel processing
+joblib==1.4.2
+
+# === NLP & TRANSFORMERS ===
+# Hugging Face transformers for NLP models
 transformers==4.44.2
+# Tokenizers for text preprocessing
+tokenizers==0.20.0
+# PyTorch for deep learning models
+torch==2.4.0
+# TorchText for NLP utilities
+torchtext==0.18.0
+
+# === DATA PROCESSING ===
+# Pandas for data manipulation (performance optimized)
+pandas==2.2.2
+# PyArrow for efficient columnar data processing
+pyarrow==17.0.0
+# JSON processing with high performance
+orjson==3.10.9
+# CSV processing with better performance
+python-csv==0.0.13
+
+# === ASYNC & CONCURRENCY ===
+# Async I/O HTTP client
+httpx==0.27.0
+# Async Redis client for caching
+aioredis==2.0.1
+# Background task processing
+celery==5.4.0
+# Message broker for Celery
+kombu==5.3.4
+
+# === VALIDATION & SERIALIZATION ===
+# Data validation and serialization
+pydantic==2.9.1
+# Email validation for Pydantic
+pydantic[email]==2.9.1
+# Settings management with Pydantic
+pydantic-settings==2.5.2
+
+# === LOGGING & MONITORING ===
+# Structured logging for production
+structlog==24.3.0
+# OpenTelemetry for distributed tracing
+opentelemetry-api==1.26.0
+opentelemetry-sdk==1.26.0
+opentelemetry-instrumentation-fastapi==0.47b0
+# Prometheus metrics collection
+prometheus-client==0.20.0
+# Health check endpoints
+fastapi-health==0.4.0
+
+# === AUTHENTICATION & SECURITY ===
+# JWT token handling
+python-jose[cryptography]==3.3.0
+# Password hashing
+passlib[bcrypt]==1.7.4
+# OAuth2 support
+authlib==1.3.2
+# CORS handling
+fastapi-cors==0.0.6
+# Security headers and middleware
+fastapi-security==1.3.0
+
+# === TESTING ===
+# Async test framework
+pytest==8.3.2
+pytest-asyncio==0.24.0
+# FastAPI testing utilities
+httpx==0.27.0
+# Test database management
+pytest-postgresql==6.1.0
+# Code coverage
+pytest-cov==5.0.0
+# Performance testing
+pytest-benchmark==4.0.0
+
+# === DEVELOPMENT TOOLS ===
+# Code formatting (keep in sync with pre-commit)
+black==24.8.0
+# Import sorting
+isort==5.13.2
+# Linting and code analysis
+ruff==0.6.4
+# Type checking
+mypy==1.11.2
+# Pre-commit hooks
+pre-commit==3.8.0
+
+# === DOCUMENTATION ===
+# API documentation generation
+pydantic-openapi==0.2.0
+# Interactive documentation
+fastapi-users==13.0.0
+# Markdown processing
+markdown==3.7
+# Code highlighting in docs
+pygments==2.18.0
+
+# === DEPLOYMENT & INFRASTRUCTURE ===
+# Google Cloud client libraries
+google-cloud-secret-manager==2.19.0
+google-cloud-monitoring==2.21.0
+google-cloud-logging==3.10.0
+# Docker environment variables
+python-dotenv==1.0.1
+# Process management
+gunicorn==23.0.0
+# Kubernetes client
+kubernetes==30.1.0
+
+# === PERFORMANCE OPTIMIZATION ===
+# Memory profiling
+memory-profiler==0.61.0
+# CPU profiling
+py-spy==0.3.14
+# Response time optimization
+orjson==3.10.9
+# Connection pooling
+urllib3[secure]==2.2.2
+
+# === ERROR HANDLING & RESILIENCE ===
+# Circuit breaker pattern
+circuitbreaker==2.0.0
+# Retry logic with exponential backoff
+tenacity==9.0.0
+# Rate limiting
+slowapi==0.1.9
+
+# === DATA VALIDATION & SCHEMA ===
+# JSON schema validation
+jsonschema==4.23.0
+# XML processing
+lxml==5.3.0
+# YAML processing
+pyyaml==6.0.2
+
+# === CACHING ===
+# In-memory caching
+cachetools==5.5.0
+# Distributed caching
+diskcache==5.6.3
+# HTTP caching
+requests-cache==1.2.1
+
+# === CONFIGURATION MANAGEMENT ===
+# Environment variable management
+environs==11.0.0
+# Configuration from multiple sources
+python-decouple==3.8
+# TOML configuration file support
+toml==0.10.2
+
+# === UTILITY LIBRARIES ===
+# Date/time utilities
+python-dateutil==2.9.0.post0
+# Timezone handling
+pytz==2024.2
+# UUID utilities
+uuid==1.30
+# Regular expressions with advanced features
+regex==2024.9.11
+# HTTP utilities
+requests==2.32.3
+# File system utilities
+pathlib==1.0.1
+# Type hints support
+typing-extensions==4.12.2
+
+# === PRODUCTION DEPENDENCIES ===
+# Process monitoring
+psutil==6.0.0
+# System resource monitoring
+glances==4.2.3
+# Log rotation
+logrotate==0.2.1
+# Process management
+supervisor==4.2.5
+
+# === LEGACY SUPPORT ===
+# Python 3.8+ compatibility
+dataclasses==0.8; python_version<"3.7"
+# Context variables for older Python versions
+contextvars==2.4; python_version<"3.7"
+
+# ============================================================================
+# DEVELOPMENT ONLY (uncomment for local development)
+# ============================================================================
+
+# Debug tools
+# ipython==8.27.0
+# jupyter==1.1.1
+# notebook==7.2.2
+
+# Profiling and debugging
+# line-profiler==4.1.3
+# memory-profiler==0.61.0
+# py-spy==0.3.14
+
+# Database tools
+# pgcli==4.0.1
+# sqlfluff==3.1.0
+
+# API testing
+# postman==1.0.0
+# swagger-codegen==3.0.56
+
+# ============================================================================
+# OPTIONAL EXTRAS (install with pip install -e .[extra])
+# ============================================================================
+
+# [redis] - Redis support
+# redis==5.1.1
+# redis-py-cluster==2.1.3
+
+# [kafka] - Apache Kafka support
+# kafka-python==2.0.2
+# confluent-kafka==2.5.0
+
+# [mlflow] - MLflow tracking
+# mlflow==2.16.2
+# mlflow-skinny==2.16.2
+
+# [spark] - Apache Spark integration
+# pyspark==3.5.2
+# pyarrow==17.0.0
+
+# [testing] - Additional testing tools
+# pytest-xdist==3.6.1
+# pytest-mock==3.14.0
+# factory-boy==3.3.1
+
+# [monitoring] - Advanced monitoring
+# sentry-sdk[fastapi]==2.14.0
+# datadog==0.51.0
+# newrelic==9.3.0
+
+# [security] - Enhanced security
+# cryptography==43.0.1
+# bcrypt==4.2.0
+# cffi==1.17.1
+
+# [performance] - Performance optimization
+# ujson==5.10.0
+# cython==3.0.11
+# numba==0.60.0
