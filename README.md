@@ -1,17 +1,27 @@
-# 🌌 AI Galaxy – Four AI Demos in One Repo
+# 🌌 AI Galaxy – Production-Ready AI Demo Portfolio
 
-## What you’ll see
-* A **galaxy‑themed landing page** (`https://<user>.github.io`) where each planet is a demo.
-* A **single FastAPI service** on **Google Cloud Run** that powers all four demos.
-* **Password‑gated “full version”** – type `galaxy2026` (or your own secret) to unlock the real model output.
-* **CI/CD** – every push rebuilds the site, the Docker image, and updates the planet URLs automatically.
+## 📋 Overview
 
-## Quick start (local)
-```bash
-# front‑end
-cd frontend && python -m http.server 8080
+AI Galaxy is a **unified, production-ready portfolio platform** showcasing four cutting-edge AI demonstrations in a single, scalable architecture. It features a stunning space-themed frontend with interactive planetary interfaces, backed by a high-performance FastAPI microservice deployed on Google Cloud Run.
 
-# back‑end (needs Docker)
-cd ../backend
-docker build -t ai-galaxy .
-docker run -e FULL_PASSWORD=galaxy2026 -p 8080:8080 ai-galaxy
+### 🌟 Key Features
+
+- **🎨 Immersive UI**: Galaxy-themed landing page with interactive 3D planetary demos
+- **🚀 Unified Backend**: Single FastAPI service powering all AI demonstrations
+- **🔐 Secure Access**: Password-gated premium features with authentication
+- **☁️ Cloud-Native**: Optimized for Google Cloud Run with auto-scaling
+- **🔄 CI/CD Pipeline**: Automated builds, testing, and deployments
+- **📊 Real-Time Demos**: Live fraud detection streams, vector search, ML predictions
+- **🎯 Production Grade**: Monitoring, logging, health checks, and observability
+
+## 🪐 Demos Overview
+
+| Demo | Technology Stack | Description | Status |
+|------|------------------|-------------|--------|
+| **🔍 CRM RAG Search** | FastAPI • PostgreSQL • pgvector • OpenAI | Vector-powered semantic search across 10M+ customer records with LLM augmentation | ✅ Production |
+| **⚡ Fraud Detection** | FastAPI • Apache Kafka • Spark • XGBoost | Real-time fraud detection processing 100K+ events/sec with auto-scaling | ✅ Production |
+| **🏥 Clinical AI** | FastAPI • XGBoost • SHAP • FHIR | Medical risk assessment with explainable AI and clinical recommendations | ✅ Production |
+| **📝 NLP Classifier** | FastAPI • BERT • ONNX • Redis | Zero-shot text classification with confidence scoring and multi-label support | ✅ Production |
+
+## 🏗️ Architecture Overview
+
