@@ -1,0 +1,531 @@
+/* Galaxy CSS - Complete Styling */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary-color: #00ffcc;
+    --bg-dark: #0a0a0a;
+    --bg-medium: #111;
+    --accent-purple: #9945ff;
+    --accent-pink: #ff006e;
+    --accent-cyan: #00d4ff;
+    --accent-green: #00ff88;
+    --accent-yellow: #ffcc00;
+}
+
+body {
+    font-family: 'IBM Plex Mono', monospace;
+    background: var(--bg-dark);
+    color: var(--primary-color);
+    overflow-x: hidden;
+    min-height: 100vh;
+}
+
+/* Galaxy Background */
+.galaxy-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -2;
+}
+
+.stars {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+}
+
+.stars::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 2px;
+    height: 2px;
+    background: white;
+    box-shadow: 
+        100px 100px white, 200px 300px white, 300px 100px white,
+        400px 400px white, 500px 200px white, 600px 300px white,
+        700px 100px white, 800px 400px white, 900px 200px white;
+}
+
+.nebula {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(ellipse at center, 
+        rgba(153, 69, 255, 0.1) 0%, 
+        rgba(255, 0, 110, 0.1) 25%, 
+        rgba(0, 212, 255, 0.1) 50%, 
+        rgba(0, 255, 136, 0.1) 75%, 
+        transparent 100%);
+}
+
+#particles {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+}
+
+/* Header */
+.galaxy-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: rgba(10, 10, 10, 0.8);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(0, 255, 204, 0.2);
+    padding: 1rem 2rem;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.logo-icon {
+    font-size: 2rem;
+}
+
+.logo h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.nav {
+    display: flex;
+    gap: 1.5rem;
+}
+
+.nav-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: all 0.3s;
+    position: relative;
+}
+
+.nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--primary-color);
+    transition: width 0.3s;
+}
+
+.nav-link:hover::after {
+    width: 100%;
+}
+
+/* Main Container */
+.galaxy-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 8rem 2rem 2rem;
+}
+
+/* Hero Section */
+.hero {
+    text-align: center;
+    margin-bottom: 4rem;
+    animation: fadeInUp 1s ease-out;
+}
+
+.hero h2 {
+    font-size: clamp(2rem, 5vw, 3rem);
+    margin-bottom: 1rem;
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-purple), var(--accent-pink));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.hero p {
+    font-size: 1.2rem;
+    opacity: 0.8;
+    margin-bottom: 2rem;
+}
+
+.hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 3rem;
+    margin-top: 2rem;
+}
+
+.stat {
+    text-align: center;
+    padding: 1rem;
+    background: rgba(0, 255, 204, 0.1);
+    border-radius: 10px;
+    border: 1px solid rgba(0, 255, 204, 0.3);
+}
+
+.stat-number {
+    display: block;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+/* Planets Section */
+.planets-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 3rem;
+    margin-top: 4rem;
+}
+
+.planet-container {
+    position: relative;
+    perspective: 1000px;
+}
+
+.planet {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    margin: 0 auto 2rem;
+    transform-style: preserve-3d;
+    animation: float 6s ease-in-out infinite;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.planet:hover {
+    transform: scale(1.1);
+    animation: spin 20s linear infinite;
+}
+
+.planet-surface {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 50px rgba(0, 255, 204, 0.5);
+}
+
+/* Planet Specific Styles */
+.crm-planet .planet-surface {
+    background: linear-gradient(135deg, #4a5568, #667eea);
+    border: 2px solid var(--accent-purple);
+}
+
+.fraud-planet .planet-surface {
+    background: linear-gradient(135deg, #ef4444, #f97316);
+    border: 2px solid var(--accent-pink);
+}
+
+.clinical-planet .planet-surface {
+    background: linear-gradient(135deg, #10b981, #06b6d4);
+    border: 2px solid var(--accent-green);
+}
+
+.nlp-planet .planet-surface {
+    background: linear-gradient(135deg, #f59e0b, #eab308);
+    border: 2px solid var(--accent-yellow);
+}
+
+.planet-icon {
+    font-size: 3rem;
+    z-index: 2;
+}
+
+.planet-ring {
+    position: absolute;
+    width: 120%;
+    height: 120%;
+    border: 3px solid;
+    border-radius: 50%;
+    top: -10%;
+    left: -10%;
+    opacity: 0.6;
+    transform: rotateX(60deg);
+}
+
+.crm-planet .planet-ring {
+    border-color: var(--accent-purple);
+}
+
+.fraud-planet .planet-ring {
+    border-color: var(--accent-pink);
+}
+
+.clinical-planet .planet-ring {
+    border-color: var(--accent-green);
+}
+
+.nlp-planet .planet-ring {
+    border-color: var(--accent-yellow);
+}
+
+.planet-info {
+    text-align: center;
+    opacity: 0.8;
+    transition: opacity 0.3s;
+}
+
+.planet-container:hover .planet-info {
+    opacity: 1;
+}
+
+.planet-info h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--primary-color);
+}
+
+.planet-info p {
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+    opacity: 0.8;
+}
+
+.planet-tech {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+}
+
+.tech-tag {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+    background: rgba(0, 255, 204, 0.1);
+    border: 1px solid rgba(0, 255, 204, 0.3);
+    border-radius: 20px;
+    color: var(--primary-color);
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal.active {
+    display: flex;
+    animation: fadeIn 0.3s;
+}
+
+.modal-content {
+    background: var(--bg-medium);
+    border: 1px solid rgba(0, 255, 204, 0.3);
+    border-radius: 15px;
+    max-width: 700px;
+    width: 90%;
+    max-height: 80vh;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+}
+
+.modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(0, 255, 204, 0.3);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-title {
+    font-size: 1.5rem;
+    color: var(--primary-color);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    font-size: 2rem;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.modal-close:hover {
+    color: var(--accent-purple);
+}
+
+.modal-body {
+    padding: 1.5rem;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* Terminal */
+.terminal {
+    background: var(--bg-dark);
+    border: 1px solid rgba(0, 255, 204, 0.2);
+    border-radius: 10px;
+    padding: 1rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.9rem;
+    min-height: 200px;
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: 1.5rem;
+}
+
+.terminal-line {
+    margin-bottom: 0.5rem;
+    white-space: pre-wrap;
+}
+
+.terminal-prompt {
+    color: var(--primary-color);
+}
+
+.terminal-output {
+    color: #00ffcc;
+}
+
+.terminal-success {
+    color: #00cc66;
+}
+
+.terminal-error {
+    color: #ff4444;
+}
+
+/* Demo Controls */
+.demo-controls {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.demo-button {
+    padding: 0.75rem 1.5rem;
+    background: var(--primary-color);
+    color: var(--bg-dark);
+    border: none;
+    border-radius: 25px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.3s;
+}
+
+.demo-button:hover {
+    background: var(--accent-purple);
+    transform: translateY(-2px);
+}
+
+.demo-button.premium {
+    background: var(--accent-pink);
+}
+
+.password-input {
+    padding: 0.75rem;
+    background: rgba(0, 255, 204, 0.1);
+    border: 1px solid rgba(0, 255, 204, 0.3);
+    border-radius: 25px;
+    color: var(--primary-color);
+    font-family: inherit;
+    font-size: 0.9rem;
+    transition: all 0.3s;
+}
+
+.password-input:focus {
+    outline: none;
+    border-color: var(--accent-purple);
+    background: rgba(0, 255, 204, 0.2);
+}
+
+/* Animations */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0) rotateY(0); }
+    50% { transform: translateY(-20px) rotateY(180deg); }
+}
+
+@keyframes spin {
+    from { transform: rotateY(0); }
+    to { transform: rotateY(360deg); }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .galaxy-header {
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+    }
+    
+    .nav {
+        gap: 1rem;
+    }
+    
+    .planets-section {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+    
+    .planet {
+        width: 150px;
+        height: 150px;
+    }
+    
+    .hero-stats {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .modal-content {
+        margin: 1rem;
+        width: calc(100% - 2rem);
+    }
+}
