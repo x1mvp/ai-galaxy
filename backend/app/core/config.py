@@ -1,55 +1,83 @@
-"""Application configuration"""
-
+"""Enhanced configuration with complete environment variable handling"""
 import os
 from functools import lru_cache
-from typing import List, Optional
+from typing import Optional
 
 class Settings:
-    """Application settings"""
+    """Configuration class with complete environment variable support"""
     
-    # Basic configuration
-    TITLE: str = "x1mvp Portfolio API"
+    # Base Configuration
+    TITLE: str = "AI Galaxy API"
     VERSION: str = "3.0.0"
-    DESCRIPTION: str = "AI-powered data engineering portfolio"
+    DESCRIPTION: str = "Production-ready AI demo portfolio platform"
     
-    # Environment
-    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
-    DEBUG: bool = ENVIRONMENT == "development"
+    # Database Configuration
+    DATABASE_URL: str = os.getenv("PGVECTOR_URL", "postgresql://localhost:5432/postgres")
+    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "portfolio")
+    POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
+    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "password")
+    POSTGRES_HOST_AUTH_METHOD: str = os.getenv("POSTGRES_HOST_AUTH_METHOD", "trust")
     
-    # Security
-    FULL_PASSWORD: str = os.getenv("FULL_PASSWORD", "galaxy2026")
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-here")
-    API_KEYS: List[str] = os.getenv("API_KEYS", "demo-key-123").split(",")
+    # Redis Configuration
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
     
-    # CORS
-    ALLOWED_ORIGINS: List[str] = os.getenv(
-        "ALLOWED_ORIGINS", 
-        "http://localhost:3000,https://x1mvp.dev"
-    ).split(",")
-    ALLOWED_HOSTS: List[str] = os.getenv(
-        "ALLOWED_HOSTS", 
-        "localhost,127.0.0.1,x1mvp.dev,api.x1mvp.dev"
-    ).split(",")
+    # Authentication
+    FULL_PASSWORD: str = os.getenv(" FULL_PASSWORD", "galaxy2026")
+    ADMIN_KEY: str = os.getenv("ADMIN_KEY", "admin123")
     
-    # Rate limiting
-    ENABLE_RATE_LIMITING: bool = os.getenv("ENABLE_RATE_LIMITING", "true").lower() == "true"
-    RATE_LIMIT_REQUESTS: int = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
+    # OpenAI Configuration
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
+    CHAT_MODEL: str = os.getenv("CHAT_MODEL", "gpt-4o-mini")
+    
+    # Feature Flags
+    ENABLE_METRICS: bool = os.getenv("ENABLE_METRICS", "true").lower() == "true"
+    ENABLE_CACHING: bool = os.getenv("ENABLE_CACHING", "true").lower() == "true"
+    ENABLE_LOGGING: bool = os.getenv("ENABLE_LOGGING", "true").lower() == "true"
+    ENABLE_SECURITY_HEADERS: bool = os.getenv("ENABLE_SECURITY_HEADERS", "true").lower() == "true"
+    
+    # Rate Limiting
+    RATE_LIMIT_REQUESTS_DEMO: int = int(os.getenv("RATE_LIMIT_REQUESTS_DEMO", "100"))
+    RATE_LIMIT_REQUESTS_FULL: int = int(os.getenv("RATE_LIMIT_REQUESTS_FULL", "1000"))
     RATE_LIMIT_WINDOW: int = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
     
-    # Features
-    ENABLE_METRICS: bool = os.getenv("ENABLE_METRICS", "true").lower() == "true"
-    DEMO_MODE: bool = os.getenv("DEMO_MODE", "false").lower() == "true"
-    
     # Performance
-    MAX_REQUEST_SIZE: int = int(os.getenv("MAX_REQUEST_SIZE", "10485760"))  # 10MB
-    REQUEST_TIMEOUT: int = int(os.getenv("REQUEST_TIMEOUT", "30"))
+    MAX_CONNECTIONS: int = int(os.getenv("MAX_CONNECTIONS", "10"))
+    TIMEOUT_SECONDS: int = int(os.getenv("TIMEOUT_SECONDS", "30"))
     
-    # Logging
-    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    # Monitoring
+    PROMETRICS_PORT: int = int(os.getenv("PROMETHEUS_PORT", "9090"))
+    
+    @classmethod
+    def validate(cls) -> None:
+        """Validate required configuration"""
+        if not cls.FULL_PASSWORD:
+            raise ValueError("FULL_PASSWORD is required")
+        
+        if not cls.OPENAI_API_KEY and cls.ENABLE_CACHING:
+            print("Warning: OPENAI_API_KEY not set but caching is enabled")
+        
+        if cls.RATE_LIMIT_REQUESTS_DEMO < 1:
+            raise ValueError("RATE_LIMIT_REQUESTS_DEMO must be at least 1")
+        
+        if cls.RATE_LIMIT_REQUESTS_FULL < 1:
+            raise ValueError("RATE_LIMIT_REQUESTS_FULL must be at least 1")
 
-@lru_cache()
-def get_settings() -> Settings:
-    """Get cached settings"""
-    return Settings()
+# Validate configuration on import
+Settings.validate()
 
-settings = get_settings()
+@lru_cache(maxsize=None)
+def get_database_url() -> str:
+    """Get database URL with validation"""
+    return Settings.DATABASE_URL
+
+@lru_cache(maxsize=None)
+def get_redis_url() -> Optional[str]:
+    """Get Redis URL if enabled"""
+    return Settings.REDIS_URL if Settings.REDIS_DB > 0 else None
+
+@lru_cache(maxsize=None)
+def get_openai_client() -> Optional[str]:
+    """Get OpenAI API key if configured"""
+    return Settings.OPENAI_API_KEY or None
