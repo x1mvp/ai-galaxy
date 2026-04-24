@@ -286,3 +286,19 @@ contextvars==2.4; python_version<"3.7"
 # ujson==5.10.0
 # cython==3.0.11
 # numba==0.60.0
+
+# Existing dependencies...
+
+# Add missing packages
+asyncpg==0.29.0
+pgvector==0.2.4
+redis==4.5.6
+openai==1.42.0
+transformers==4.44.2
+
+# Testing and observability
+pytest==7.4.3
+pytest-asyncio==0.21.0
+httpx==0.27.0
+pytest-cov==4.8.0
+
