@@ -1,3 +1,35 @@
+# Add these imports at the top of backend/app/main.py
+from app.core.config import Settings
+from app import crm, fraud, clinical, nlp
+
+# Remove the line that's causing the error:
+# from . import crm, fraud, clinical, nlp
+
+# If the imports still fail, try absolute imports:
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
+from app import crm, fraud, clinical, nlp
+
+# Then try:
+# Use direct imports for development
+from app.crm.router import router as crm
+from app.fraud.router import router as fraud
+from app.clinical.router import router as clinical
+from app.nlp.router import router as nlp
+
+app.include_router(crm.router, prefix="/api/v1/crm")
+app.include_router(fraud.router, prefix="/api/v1/fraud")
+app.include_router(clinical.router, prefix="/api/v1/clinical")
+app.include_router(nlp.router, prefix="/api/v1/nlp")
+
+# Health check
+@app.get("/healthz")
+async def health_check():
+    return {"status": "healthy"}
+
+if __name__ == '__main__':
+    uvicorn(app, host="0.0.0.0", port=8000)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
