@@ -18,7 +18,7 @@ class SecurityManager:
         self.api_keys: Dict[str, Dict] = {}
         self.failed_attempts: Dict[str, List[float]] = {}
         self.rate_limits: Dict[str, List[float]] = {}
-        # Admin keys are stored as a set for O(1) lookup; load from env at startup.
+        # ADMIN_KEY is validated at startup by Settings.validate(); no default here.
         raw_admin_keys = os.getenv("ADMIN_KEY", "")
         if not raw_admin_keys:
             raise RuntimeError(
@@ -59,12 +59,10 @@ class SecurityManager:
         admin_key: str = Header(default=None),
     ) -> bool:
         """Full endpoints: require a valid API key; admin key bypasses rate limits."""
-        # Admin key grants access unconditionally (still validated against the set).
         if admin_key and admin_key in self.admin_keys:
             return True
 
-        # Regular API key path: validate, then check brute-force lockout.
-        identifier = api_key  # use the key itself as the identifier
+        identifier = api_key
         if self._is_brute_force_locked(identifier):
             return False
 
@@ -94,7 +92,12 @@ class SecurityManager:
         """Record a single failed authentication attempt."""
         self.failed_attempts.setdefault(identifier, []).append(time.time())
 
-    def _is_brute_force_locked(self, identifier: str, window: int = 300, max_attempts: int = 5) -> bool:
+    def _is_brute_force_locked(
+        self,
+        identifier: str,
+        window: int = 300,
+        max_attempts: int = 5,
+    ) -> bool:
         """
         Return True if *identifier* has exceeded *max_attempts* failed
         authentication attempts within the last *window* seconds.
@@ -102,7 +105,6 @@ class SecurityManager:
         now = time.time()
         cutoff = now - window
         recent = [t for t in self.failed_attempts.get(identifier, []) if t > cutoff]
-        # Keep the list tidy.
         self.failed_attempts[identifier] = recent
         return len(recent) >= max_attempts
 
@@ -119,7 +121,6 @@ class SecurityManager:
 
         now = time.time()
         window_start = now - settings.RATE_LIMIT_WINDOW
-
         recent = [t for t in self.rate_limits.get(identifier, []) if t > window_start]
         self.rate_limits[identifier] = recent
         return len(recent) >= settings.RATE_LIMIT_REQUESTS
@@ -154,18 +155,3 @@ class SecurityManager:
     @staticmethod
     def get_all_services() -> List[str]:
         return ["crm", "fraud", "clinical", "nlp"]
-
-
-def get_openai_client() -> Optional[object]:
-    """Return an OpenAI client if OPENAI_API_KEY is configured, else None."""
-    from .config import settings
-
-    if not settings.OPENAI_API_KEY:
-        return None
-
-    try:
-        import openai  # type: ignore
-        return openai.OpenAI(api_key=settings.OPENAI_API_KEY)
-    except ImportError:
-        logger.warning("openai package is not installed; client unavailable.")
-        return None
