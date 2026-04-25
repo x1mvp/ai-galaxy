@@ -1,0 +1,30 @@
+# Update your GCP project ID and region
+apiVersion: v3.0.0
+env:
+  GCP_PROJECT_ID: "703894518977"
+  GCP_REGION: us-central1
+  IMAGE: gcr.io/ai-galaxy:v3.0.0
+  SERVICE_NAME: ai-galaxy
+  MEMORY: 2Gi
+  CPU: 1
+  MIN_INSTANCES: 0
+  MAX_INSTANCES: 10
+  TIMEOUT: 60
+  CONCURRENCY: "$GCP_CURRENCY"
+
+# Environment variables
+env:
+  PROJECT_ID: "703894518977"
+  REGION: us-central1
+  FULL_PASSWORD: galaxy2026
+  LOG_LEVEL: info
+  POSTGRES_DB: postgres
+  REDIS_URL: redis
+  OPENAI_API_KEY: ${GCP_OPENAI_API_KEY}
+  OPENAI_EMBEDDING_MODEL: text-embedding-3-large
+  CHAT_MODEL: gpt-4o-mini
+  PROMETHEUS_API: ${{ secrets.PROMETHEUS_API_KEY }}
+  POSTGRES_DB: postgres
+  REDIS_URL: redis: redis:6379
+  DATABASE_URL: postgresql://localhost:5432/portfolio
+  ENVIRONMENT: production
