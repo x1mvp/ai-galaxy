@@ -2,79 +2,90 @@ name: Deploy AI Galaxy
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+env:
+  IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-galaxy
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Python 3.11
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      
+          python-version: "3.11"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pytest pytest-cov pytest-asyncio httpx fastapi
           pip install -r backend/requirements.txt
-      
-      - name: Run tests
+
+      - name: Run unit and integration tests
         run: |
           cd backend
-          pytest tests/ -v --cov=app
-          pytest tests/integration/ -v
-          pytest tests/load/ -v --benchmark-only
-      
+          pytest tests/ tests/integration/ -v --cov=app --cov-report=xml
+
+      # Load/benchmark tests are slow and environment-sensitive.
+      # Run them manually or on a separate scheduled workflow.
+      # - name: Run load tests
+      #   run: pytest tests/load/ -v --benchmark-only
+
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           file: ./backend/coverage.xml
 
   build-and-deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # Only deploy on pushes to main, not on PRs.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          buildx-builder: v1
-          buildx-flags: "--platform linux/amd64"
-      
-      - name: Login to Google Cloud
+
+      - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-      
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker to push to GCR
+        run: gcloud auth configure-docker gcr.io --quiet
+
       - name: Build and push Docker image
         run: |
           docker buildx build \
-            -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-galaxy:${{ github.sha }} \
-            -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-galaxy:latest \
-            --load buildx \
+            --platform linux/amd64 \
+            -t ${{ env.IMAGE }}:${{ github.sha }} \
+            -t ${{ env.IMAGE }}:latest \
+            --push \
             --cache-from type=gha \
-            --cache-to type=gha \
+            --cache-to type=gha,mode=max \
             .
-        
-        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-galaxy:${{ github.sha }}
-        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-galaxy:latest
-      
+
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ai-galaxy \
-            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-galaxy:latest \
+            --image ${{ env.IMAGE }}:${{ github.sha }} \
             --region us-central1 \
             --platform managed \
             --allow-unauthenticated \
             --memory 2Gi \
             --cpu 1 \
             --max-concurrency 80 \
-            --min-instances 0 \
+            --min-instances 1 \
             --max-instances 10 \
-            --set-env-vars "FULL_PASSWORD=galaxy2026"
+            --project ${{ secrets.GCP_PROJECT_ID }} \
+            --set-env-vars "FULL_PASSWORD=${{ secrets.FULL_PASSWORD }}"
