@@ -6,6 +6,7 @@ Version: 3.0.0
 Last Updated: 2026-01-15
 """
 
+import os
 import asyncio
 import json
 import logging
@@ -26,7 +27,11 @@ from openai import AsyncOpenAI
 import redis.asyncio as redis
 from prometheus_client import Counter, Histogram, Gauge
 
-# Configure logging
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Router configuration
@@ -96,6 +101,25 @@ class CRMConfig:
     ENABLE_METRICS: bool = os.getenv("ENABLE_METRICS", "true").lower() == "true"
     RATE_LIMIT_REQUESTS: int = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
     RATE_LIMIT_WINDOW: int = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
+    
+    @classmethod
+    def validate(cls) -> None:
+        """Validate configuration parameters"""
+        if not cls.DATABASE_URL:
+            raise RuntimeError("PGVECTOR_URL environment variable is required")
+        
+        if not cls.OPENAI_API_KEY:
+            raise RuntimeError("OPENAI_API_KEY environment variable is required")
+        
+        if cls.DEFAULT_TOP_K <= 0 or cls.DEFAULT_TOP_K > cls.MAX_TOP_K:
+            raise ValueError(f"DEFAULT_TOP_K must be between 1 and {cls.MAX_TOP_K}")
+
+# Validate configuration
+try:
+    CRMConfig.validate()
+except (ValueError, RuntimeError) as e:
+    logger.error(f"Configuration validation failed: {e}")
+    raise
 
 # Global configuration
 CONFIG = CRMConfig()
@@ -114,7 +138,7 @@ class SearchQuery(BaseModel):
         description="Search query for lead matching"
     )
     top_k: int = Field(
-        default=5, 
+        default=CONFIG.DEFAULT_TOP_K, 
         ge=1, 
         le=CONFIG.MAX_TOP_K,
         description="Number of results to return"
@@ -209,33 +233,43 @@ class DatabaseManager:
     def __init__(self):
         self.pool: Optional[asyncpg.Pool] = None
         self.redis_client: Optional[redis.Redis] = None
-        self._initialize()
+        self._initialized = False
+        self._init_lock = asyncio.Lock()
     
     async def _initialize(self):
-        """Initialize database pool and Redis"""
-        try:
-            # Create connection pool
-            self.pool = await asyncpg.create_pool(
-                CONFIG.DATABASE_URL,
-                min_size=2,
-                max_size=CONFIG.MAX_CONNECTIONS,
-                command_timeout=CONFIG.CONNECTION_TIMEOUT
-            )
-            logger.info("✅ PostgreSQL pool created")
+        """Initialize database pool and Redis (thread-safe)"""
+        if self._initialized:
+            return
+        
+        async with self._init_lock:
+            if self._initialized:
+                return
             
-            # Test connection and register vector extension
-            async with self.pool.acquire() as conn:
-                await register_vector(conn)
-                await conn.execute("SELECT 1")  # Test query
-            logger.info("✅ pgvector extension registered")
-            
-            # Initialize Redis if enabled
-            if CONFIG.ENABLE_CACHING:
-                await self._initialize_redis()
-            
-        except Exception as e:
-            logger.error(f"❌ Database initialization failed: {e}")
-            raise RuntimeError(f"Database connection failed: {str(e)}")
+            try:
+                # Create connection pool
+                self.pool = await asyncpg.create_pool(
+                    CONFIG.DATABASE_URL,
+                    min_size=2,
+                    max_size=CONFIG.MAX_CONNECTIONS,
+                    command_timeout=CONFIG.CONNECTION_TIMEOUT
+                )
+                logger.info("✅ PostgreSQL pool created")
+                
+                # Test connection and register vector extension
+                async with self.pool.acquire() as conn:
+                    await register_vector(conn)
+                    await conn.execute("SELECT 1")  # Test query
+                logger.info("✅ pgvector extension registered")
+                
+                # Initialize Redis if enabled
+                if CONFIG.ENABLE_CACHING:
+                    await self._initialize_redis()
+                
+                self._initialized = True
+                
+            except Exception as e:
+                logger.error(f"❌ Database initialization failed: {e}")
+                raise RuntimeError(f"Database connection failed: {str(e)}")
     
     async def _initialize_redis(self):
         """Initialize Redis client for caching"""
@@ -243,7 +277,9 @@ class DatabaseManager:
             self.redis_client = redis.Redis(
                 host=os.getenv("REDIS_HOST", "localhost"),
                 port=int(os.getenv("REDIS_PORT", "6379")),
-                decode_responses=True
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5
             )
             await self.redis_client.ping()
             logger.info("✅ Redis connected for caching")
@@ -258,6 +294,8 @@ class DatabaseManager:
         filters: Optional[Dict[str, Any]] = None
     ) -> Tuple[List[SearchResult], EmbeddingMetrics]:
         """Search for similar leads using vector similarity"""
+        
+        await self._initialize()  # Ensure initialized
         
         start_time = time.time()
         
@@ -344,6 +382,8 @@ class DatabaseManager:
     
     async def get_random_leads(self, limit: int = 3) -> List[Dict[str, Any]]:
         """Get random leads for demo"""
+        await self._initialize()  # Ensure initialized
+        
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -358,6 +398,8 @@ class DatabaseManager:
     
     async def get_database_stats(self) -> Dict[str, Any]:
         """Get database statistics"""
+        await self._initialize()  # Ensure initialized
+        
         async with self.pool.acquire() as conn:
             stats = await conn.fetchrow("""
                 SELECT 
@@ -373,7 +415,8 @@ class DatabaseManager:
                 "sources": stats['sources'],
                 "vector_dimensions": 1536,  # For text-embedding-3-large
                 "active_connections": self.pool.get_size(),
-                "idle_connections": self.pool.get_idle_size()
+                "idle_connections": self.pool.get_idle_size(),
+                "redis_connected": self.redis_client is not None
             }
     
     async def close(self):
@@ -482,10 +525,21 @@ class RAGEngine:
         self.db_manager = DatabaseManager()
         self.openai_client = OpenAIClientManager()
         self.request_count = 0
+        self._initialized = False
+    
+    async def _initialize(self):
+        """Initialize RAG engine components"""
+        if self._initialized:
+            return
+        
+        # Initialize database manager
+        await self.db_manager._initialize()
+        self._initialized = True
     
     async def search_demo(self, limit: int = 3) -> DemoResponse:
         """Generate demo response with random leads"""
         try:
+            await self._initialize()
             start_time = time.time()
             
             # Get random leads
@@ -510,6 +564,7 @@ class RAGEngine:
     async def search_full(self, query: SearchQuery) -> SearchResponse:
         """Perform full RAG search with LLM answer"""
         try:
+            await self._initialize()
             start_time = time.time()
             self.request_count += 1
             
@@ -518,10 +573,13 @@ class RAGEngine:
             cached_result = None
             
             if CONFIG.ENABLE_CACHING and self.db_manager.redis_client:
-                cached_data = await self.db_manager.redis_client.get(cache_key)
-                if cached_data:
-                    cached_result = SearchResponse.parse_raw(cached_data)
-                    logger.info(f"Cache hit for query: {query.q[:50]}...")
+                try:
+                    cached_data = await self.db_manager.redis_client.get(cache_key)
+                    if cached_data:
+                        cached_result = SearchResponse.parse_obj(json.loads(cached_data))
+                        logger.info(f"Cache hit for query: {query.q[:50]}...")
+                except Exception as e:
+                    logger.warning(f"Cache retrieval failed: {e}")
             
             if cached_result:
                 SEARCH_REQUESTS_TOTAL.labels(endpoint="full", status="cache_hit").inc()
@@ -571,11 +629,14 @@ class RAGEngine:
             
             # Cache result
             if CONFIG.ENABLE_CACHING and self.db_manager.redis_client:
-                await self.db_manager.redis_client.setex(
-                    cache_key, 
-                    CONFIG.CACHE_TTL, 
-                    response.json()
-                )
+                try:
+                    await self.db_manager.redis_client.setex(
+                        cache_key, 
+                        CONFIG.CACHE_TTL, 
+                        response.json()
+                    )
+                except Exception as e:
+                    logger.warning(f"Cache storage failed: {e}")
             
             SEARCH_REQUESTS_TOTAL.labels(endpoint="full", status="success").inc()
             SEARCH_DURATION.observe(processing_time / 1000)
@@ -592,6 +653,8 @@ class RAGEngine:
     async def health_check(self) -> Dict[str, Any]:
         """Health check for RAG engine"""
         try:
+            await self._initialize()
+            
             # Test database connection
             db_stats = await self.db_manager.get_database_stats()
             
@@ -625,7 +688,9 @@ rag_engine = RAGEngine()
 
 def get_authentication(pwd: str = Header(..., alias="X-API-Key")) -> bool:
     """Simple API key authentication"""
-    if pwd != os.getenv("API_PASSWORD", "demo2026"):
+    api_password = os.getenv("API_PASSWORD", "demo2026")
+    if pwd != api_password:
+        logger.warning(f"Invalid API key attempt: {pwd[:8]}...")
         raise HTTPException(status_code=401, detail="Invalid API key")
     return True
 
@@ -696,6 +761,7 @@ async def health_check() -> Dict[str, Any]:
 async def get_stats() -> Dict[str, Any]:
     """Get service statistics and configuration"""
     try:
+        await rag_engine._initialize()
         db_stats = await rag_engine.db_manager.get_database_stats()
         
         return {
@@ -713,7 +779,7 @@ async def get_stats() -> Dict[str, Any]:
             },
             "metrics": {
                 "request_count": rag_engine.request_count,
-                "active_connections": ACTIVE_CONNECTIONS._value.get()
+                "active_connections": ACTIVE_CONNECTIONS._value.get() or 0
             }
         }
         
@@ -767,8 +833,11 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 async def cleanup():
     """Cleanup resources on shutdown"""
-    await rag_engine.db_manager.close()
-    logger.info("CRM RAG engine cleaned up")
+    try:
+        await rag_engine.db_manager.close()
+        logger.info("CRM RAG engine cleaned up")
+    except Exception as e:
+        logger.error(f"Cleanup failed: {e}")
 
 # Export for testing
 __all__ = [
