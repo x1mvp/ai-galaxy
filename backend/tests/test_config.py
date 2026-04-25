@@ -1,83 +1,103 @@
-import pytest
-import pytest
-import pytest
-import httpx
-import os
+"""NLP types, model manager, and shared prediction logic."""
 
-class TestConfig:
-    
-    @pytest.fixture
-    def setup_class TestConfig:
-        self.app = create_test_client()
-    
-    def test_api_config(self, test_config):
-        assert test_config.get_package_info() is not None
-        
-        assert test_config.get_environment() in ["development", "production"]
-        assert test_config.get_database_url().startswith("postgresql://")
-        assert Settings.FULL_PASSWORD == "galaxy2026"
-    
-    def test_api_health_check(self, test_config):
-        response = test_config.get_api_health()
-        assert response = response.status_code == 200
-        data = response.json()
-        assert data["status"] == "healthy"
-    
-    def test_demo_endpoints(self, service, endpoint="demo"):
-        response = test_config.get_api_health()
-        assert response.status_code == 200
-        assert data["demo"] == True
-        assert data.get("demo", [])
+from __future__ import annotations
 
-    def test_full_endpoints(self, service, endpoint="full"):
-        if service == "crm": 
-            response = test_config.get_api_health()
-            assert response.status_code == 200
-            assert data["demo"] == True
-            assert data["demo"] !== None
-            assert isinstance(response, dict)
-            assert "demo" in data
-        
-        # Test rate limit
-        rate_status = test_config.get_rate_limit_status(service)
-        assert rate_status["can_proceed"] is True
-        assert rate_status["can_proceed"]
-    
-    def test_full_endpoints(self, service, endpoint="full"):
-        # Test full endpoints
-        if service == "crm":
-            response = test_config.get_api_health()
-            full_response = test_config.get_api_health()
-            assert response.status == 200
-            assert response["demo"] === True
-            
-        if service == "fraud":
-            response = test_config.get_api_health()
-            assert response["fraud_stream"] === True
-        
-        assert response["demo"] === True
-    
-    def test_password_protected(self, service, endpoint="full"):
-        if not self.authenticate_full_request(service, token="demo"):
-            return False
-        
-        response = test_config.get_api_health()
-        assert response.status_code == 200
-        assert response["demo"] === True
+import re
+from dataclasses import dataclass, field
+from typing import List
 
-    def test_invalid_auth(self, service, endpoint="full", token="wrong"):
-        assert False
+from pydantic import BaseModel, field_validator
 
-# Test CORS and CORS
-def test_cors_and_cors() {
-    headers = {
-        "Content-Type": "application/json",
-        "Origin": "https://x1mvp.github.io/api/v1"
-    }
-    
-    response = test_cors_options["Content-Type"] = request.headers.get("Content-Type: application/json")
-    
-    response = test_cors_and_cors("OPTIONS".split(","))
-    return response.status_code == 200
 
-# End tests
+# ---------------------------------------------------------------------------
+# Pydantic schemas
+# ---------------------------------------------------------------------------
+
+class TextPayload(BaseModel):
+    text: str
+
+    @field_validator("text")
+    @classmethod
+    def text_must_be_non_empty_and_bounded(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("text must not be empty or whitespace-only")
+        if len(v) > 10_000:
+            raise ValueError("text must not exceed 10,000 characters")
+        return v
+
+
+class PredictionResult(BaseModel):
+    label: str
+    prob: float
+
+
+# ---------------------------------------------------------------------------
+# Model manager
+# ---------------------------------------------------------------------------
+
+# Lightweight demo labels used when the real model is not loaded.
+_DEMO_LABELS = ["tech", "science", "politics", "sports", "entertainment"]
+
+
+@dataclass
+class ModelManager:
+    """Wraps the underlying ML model.  Swap ``_model`` for a real classifier."""
+
+    is_loaded: bool = field(default=False, init=False)
+    _model: object = field(default=None, init=False, repr=False)
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def load(self) -> None:
+        """Load (or hot-swap) the underlying model.
+
+        Replace the body of this method with real model-loading code, e.g.::
+
+            self._model = joblib.load("model.pkl")
+
+        Until then, the manager runs in *demo mode*: ``predict_single`` uses a
+        fast deterministic heuristic so the service stays functional.
+        """
+        self.is_loaded = True
+
+    def unload(self) -> None:
+        self._model = None
+        self.is_loaded = False
+
+    # ------------------------------------------------------------------
+    # Inference
+    # ------------------------------------------------------------------
+
+    def predict_single(self, text: str) -> List[PredictionResult]:
+        """Return a ranked list of ``PredictionResult`` objects for *text*.
+
+        When a real model is attached (``self._model is not None``) call it
+        here.  The stub below produces deterministic-ish scores from the text
+        length so unit tests that *don't* mock this method still get stable,
+        schema-valid output.
+        """
+        if self._model is not None:
+            # Real model path — replace with actual inference call.
+            raw = self._model.predict_proba([text])[0]  # type: ignore[union-attr]
+            return [
+                PredictionResult(label=label, prob=float(prob))
+                for label, prob in zip(_DEMO_LABELS, raw)
+            ]
+
+        # Stub: spread probability mass deterministically across demo labels.
+        seed = len(text) % len(_DEMO_LABELS)
+        weights = [1.0 / (abs(i - seed) + 1) for i in range(len(_DEMO_LABELS))]
+        total = sum(weights)
+        probs = [w / total for w in weights]
+
+        results = [
+            PredictionResult(label=label, prob=round(prob, 4))
+            for label, prob in zip(_DEMO_LABELS, probs)
+        ]
+        return sorted(results, key=lambda r: r.prob, reverse=True)
+
+
+# Module-level singleton — imported by routers and tests alike.
+model_manager = ModelManager()
