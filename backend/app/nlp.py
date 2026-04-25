@@ -584,4 +584,22 @@ def create_sample_predictions() -> List[PredictionResult]:
         PredictionResult(label="spam", prob=0.87),
         PredictionResult(label="news", prob=0.71),
         PredictionResult(label="tech", prob=0.62),
-        PredictionResult(label="](streamdown:incomplete-link)
+        PredictionResult(label="sports", prob=0.45),
+        PredictionResult(label="finance", prob=0.33)
+    ]
+
+# ===============================================================================
+# MAIN APPLICATION ENTRY POINT
+# ===============================================================================
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    # Development server
+    uvicorn.run(
+        "nlp_service:router",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
