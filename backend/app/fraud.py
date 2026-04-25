@@ -6,6 +6,7 @@ Version: 3.0.0
 Last Updated: 2026-01-15
 """
 
+import os
 import asyncio
 import json
 import logging
@@ -25,7 +26,11 @@ from sse_starlette.sse import EventSourceResponse
 import redis.asyncio as redis
 from prometheus_client import Counter, Histogram, Gauge
 
-# Configure logging
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Router configuration
@@ -79,13 +84,13 @@ class FraudStreamConfig:
     """Configuration for fraud detection stream"""
     
     # Stream parameters
-    BATCH_SIZE: int = 10
-    BATCH_INTERVAL_MS: int = 1  # 10K events/second
-    MAX_CONCURRENT_STREAMS: int = 100
+    BATCH_SIZE: int = int(os.getenv("FRAUD_BATCH_SIZE", "10"))
+    BATCH_INTERVAL_MS: int = int(os.getenv("FRAUD_BATCH_INTERVAL", "1"))
+    MAX_CONCURRENT_STREAMS: int = int(os.getenv("FRAUD_MAX_STREAMS", "100"))
     
     # Fraud detection parameters
-    BASE_FRAUD_RATE: float = 0.02  # 2% base fraud rate
-    AMOUNT_FRAUD_MULTIPLIER: float = 1.5  # Higher amounts = higher fraud risk
+    BASE_FRAUD_RATE: float = float(os.getenv("FRAUD_BASE_RATE", "0.02"))
+    AMOUNT_FRAUD_MULTIPLIER: float = float(os.getenv("FRAUD_AMOUNT_MULTIPLIER", "1.5"))
     LOCATION_FRAUD_RATES: Dict[str, float] = {
         "NY": 0.025, "LA": 0.018, "SF": 0.022, 
         "CHI": 0.020, "MIA": 0.030, "LON": 0.015,
@@ -108,9 +113,25 @@ class FraudStreamConfig:
     }
     
     # Performance settings
-    ENABLE_CACHING: bool = True
-    CACHE_TTL: int = 300  # 5 minutes
-    ENABLE_METRICS: bool = True
+    ENABLE_CACHING: bool = os.getenv("ENABLE_CACHING", "true").lower() == "true"
+    CACHE_TTL: int = int(os.getenv("CACHE_TTL", "300"))
+    ENABLE_METRICS: bool = os.getenv("ENABLE_METRICS", "true").lower() == "true"
+    
+    @classmethod
+    def validate(cls) -> None:
+        """Validate configuration parameters"""
+        if cls.BATCH_SIZE <= 0 or cls.BATCH_SIZE > 100:
+            raise ValueError("BATCH_SIZE must be between 1 and 100")
+        
+        if cls.BASE_FRAUD_RATE < 0 or cls.BASE_FRAUD_RATE > 1:
+            raise ValueError("BASE_FRAUD_RATE must be between 0 and 1")
+
+# Validate configuration
+try:
+    FraudStreamConfig.validate()
+except ValueError as e:
+    logger.error(f"Configuration validation failed: {e}")
+    raise
 
 # Global configuration
 CONFIG = FraudStreamConfig()
@@ -321,7 +342,8 @@ class StreamManager:
     def __init__(self):
         self.active_streams: Dict[str, StreamMetrics] = {}
         self.redis_client: Optional[redis.Redis] = None
-        self._initialize_redis()
+        self.max_streams = CONFIG.MAX_CONCURRENT_STREAMS
+        asyncio.create_task(self._initialize_redis())
     
     async def _initialize_redis(self):
         """Initialize Redis client for caching"""
@@ -329,18 +351,46 @@ class StreamManager:
             self.redis_client = redis.Redis(
                 host=os.getenv("REDIS_HOST", "localhost"),
                 port=int(os.getenv("REDIS_PORT", "6379")),
-                decode_responses=True
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5
             )
             await self.redis_client.ping()
             logger.info("✅ Redis connected for stream caching")
         except Exception as e:
             logger.warning(f"Redis not available: {e}")
+            self.redis_client = None
     
-    def create_stream(self, stream_id: str) -> StreamMetrics:
-        """Create a new stream metrics tracker"""
+    async def create_stream(self, stream_id: str, client_id: str) -> StreamMetrics:
+        """Create a new stream metrics tracker with rate limiting"""
+        
+        # Check stream limit
+        if len(self.active_streams) >= self.max_streams:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Maximum concurrent streams ({self.max_streams}) exceeded"
+            )
+        
         metrics = StreamMetrics()
-        self.active_streams[stream_id] = metrics
+        self.active_streams[stream_id] = {
+            "metrics": metrics,
+            "client_id": client_id,
+            "created_at": time.time()
+        }
+        
         ACTIVE_STREAMS.inc()
+        
+        # Cache in Redis if available
+        if self.redis_client:
+            try:
+                await self.redis_client.setex(
+                    f"stream:{stream_id}",
+                    CONFIG.CACHE_TTL,
+                    json.dumps({"client_id": client_id, "status": "active"})
+                )
+            except Exception as e:
+                logger.warning(f"Failed to cache stream info: {e}")
+        
         return metrics
     
     def remove_stream(self, stream_id: str):
@@ -348,16 +398,22 @@ class StreamManager:
         if stream_id in self.active_streams:
             del self.active_streams[stream_id]
             ACTIVE_STREAMS.dec()
+            
+            # Remove from Redis
+            if self.redis_client:
+                asyncio.create_task(
+                    self.redis_client.delete(f"stream:{stream_id}")
+                )
     
     def get_global_metrics(self) -> Dict[str, Any]:
         """Get aggregated metrics across all streams"""
         total_events = sum(
-            metrics.events_generated 
-            for metrics in self.active_streams.values()
+            stream_data["metrics"].events_generated 
+            for stream_data in self.active_streams.values()
         )
         total_fraud = sum(
-            metrics.fraud_events 
-            for metrics in self.active_streams.values()
+            stream_data["metrics"].fraud_events 
+            for stream_data in self.active_streams.values()
         )
         
         global_fraud_rate = total_fraud / max(total_events, 1)
@@ -369,7 +425,7 @@ class StreamManager:
             "total_fraud": total_fraud,
             "fraud_rate": round(global_fraud_rate, 4),
             "uptime": time.time() - min(
-                (m.start_time for m in self.active_streams.values()),
+                (stream_data["created_at"] for stream_data in self.active_streams.values()),
                 default=time.time()
             )
         }
@@ -463,9 +519,17 @@ async def full_fraud_stream(
     if event_types:
         allowed_types = set(event.strip().lower() for event in event_types.split(','))
     
-    # Create stream metrics
+    # Create stream with rate limiting
     stream_id = str(uuid.uuid4())
-    metrics = stream_manager.create_stream(stream_id)
+    client_id = request.client.host if request.client else "unknown"
+    
+    try:
+        metrics = await stream_manager.create_stream(stream_id, client_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create stream: {e}")
+        raise HTTPException(status_code=500, detail="Failed to initialize stream")
     
     async def event_generator() -> AsyncGenerator[Dict[str, Any], None]:
         """Generate streaming events"""
@@ -515,14 +579,18 @@ async def full_fraud_stream(
                     batch_amount_total += event.amount
                 
                 # Update stream metrics
-                metrics.events_generated += len(batch_events)
-                metrics.fraud_events += batch_fraud
-                metrics.legit_events += len(batch_events) - batch_fraud
-                metrics.average_amount = (
-                    (metrics.average_amount * (metrics.events_generated - len(batch_events)) + 
-                     batch_amount_total) / metrics.events_generated
-                    if metrics.events_generated > 0 else 0.0
-                )
+                stream_data = stream_manager.active_streams.get(stream_id)
+                if stream_data:
+                    stream_metrics = stream_data["metrics"]
+                    stream_metrics.events_generated += len(batch_events)
+                    stream_metrics.fraud_events += batch_fraud
+                    stream_metrics.legit_events += len(batch_events) - batch_fraud
+                    
+                    if stream_metrics.events_generated > 0:
+                        stream_metrics.average_amount = (
+                            (stream_metrics.average_amount * (stream_metrics.events_generated - len(batch_events)) + 
+                             batch_amount_total) / stream_metrics.events_generated
+                        )
                 
                 # Calculate batch metrics
                 batch_fraud_rate = batch_fraud / max(len(batch_events), 1)
@@ -547,12 +615,12 @@ async def full_fraud_stream(
                             "throughput_events_per_sec": round(throughput, 2)
                         },
                         "stream_metrics": {
-                            "total_events": metrics.events_generated,
-                            "total_fraud": metrics.fraud_events,
+                            "total_events": stream_metrics.events_generated if stream_data else 0,
+                            "total_fraud": stream_metrics.fraud_events if stream_data else 0,
                             "overall_fraud_rate": round(
-                                metrics.fraud_events / max(metrics.events_generated, 1), 4
-                            ),
-                            "uptime_seconds": round(time.time() - metrics.start_time, 2)
+                                stream_metrics.fraud_events / max(stream_metrics.events_generated, 1), 4
+                            ) if stream_data else 0,
+                            "uptime_seconds": round(time.time() - stream_metrics.start_time, 2) if stream_data else 0
                         }
                     })
                 }
@@ -602,9 +670,10 @@ async def websocket_fraud_stream(websocket: WebSocket):
     
     await websocket.accept()
     stream_id = str(uuid.uuid4())
-    metrics = stream_manager.create_stream(stream_id)
+    client_id = websocket.client.host if websocket.client else "unknown"
     
     try:
+        metrics = await stream_manager.create_stream(stream_id, client_id)
         logger.info(f"WebSocket connected: {stream_id}")
         
         # Send initial connection message
@@ -618,26 +687,36 @@ async def websocket_fraud_stream(websocket: WebSocket):
         while True:
             # Generate events
             batch_events = []
+            batch_fraud = 0
+            batch_amount_total = 0.0
+            
             for _ in range(CONFIG.BATCH_SIZE):
                 event = event_generator.generate_event()
                 batch_events.append(event.to_dict())
                 
                 # Update metrics
                 if event.label == "fraud":
-                    metrics.fraud_events += 1
-                else:
-                    metrics.legit_events += 1
+                    batch_fraud += 1
                 
-                metrics.events_generated += 1
+                batch_amount_total += event.amount
+            
+            # Update stream metrics
+            stream_data = stream_manager.active_streams.get(stream_id)
+            if stream_data:
+                stream_metrics = stream_data["metrics"]
+                stream_metrics.events_generated += len(batch_events)
+                stream_metrics.fraud_events += batch_fraud
+                stream_metrics.legit_events += len(batch_events) - batch_fraud
             
             # Send batch
             await websocket.send_json({
                 "type": "batch",
                 "events": batch_events,
                 "metrics": {
-                    "total_events": metrics.events_generated,
-                    "fraud_events": metrics.fraud_events,
-                    "fraud_rate": metrics.fraud_events / max(metrics.events_generated, 1)
+                    "total_events": stream_metrics.events_generated if stream_data else 0,
+                    "fraud_events": stream_metrics.fraud_events if stream_data else 0,
+                    "fraud_rate": stream_metrics.fraud_events / max(stream_metrics.events_generated, 1) if stream_data else 0,
+                    "avg_amount": batch_amount_total / max(len(batch_events), 1)
                 }
             })
             
@@ -647,16 +726,102 @@ async def websocket_fraud_stream(websocket: WebSocket):
         logger.info(f"WebSocket disconnected: {stream_id}")
     except Exception as e:
         logger.error(f"WebSocket error: {stream_id} - {e}")
-        await websocket.send_json({
-            "type": "error",
-            "error": str(e)
-        })
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "error": str(e)
+            })
+        except:
+            pass  # WebSocket might already be closed
     finally:
         stream_manager.remove_stream(stream_id)
 
 # ===============================================================================
 # ANALYTICS ENDPOINTS
 # ===============================================================================
+
+class FraudAnalytics:
+    """Analytics provider for fraud detection patterns"""
+    
+    @staticmethod
+    def analyze_fraud_by_location() -> Dict[str, Any]:
+        """Analyze fraud patterns by location"""
+        location_stats = {}
+        for location, fraud_rate in CONFIG.LOCATION_FRAUD_RATES.items():
+            location_stats[location] = {
+                "fraud_rate": fraud_rate,
+                "risk_level": "high" if fraud_rate > 0.02 else "medium" if fraud_rate > 0.015 else "low",
+                "sample_events": random.randint(50, 200)
+            }
+        return location_stats
+    
+    @staticmethod
+    def analyze_fraud_by_amount() -> Dict[str, Any]:
+        """Analyze fraud patterns by amount range"""
+        return {
+            "0-100": {"fraud_rate": 0.01, "count": random.randint(800, 1200)},
+            "100-500": {"fraud_rate": 0.02, "count": random.randint(600, 1000)},
+            "500-1000": {"fraud_rate": 0.04, "count": random.randint(200, 400)},
+            "1000+": {"fraud_rate": 0.08, "count": random.randint(100, 200)}
+        }
+    
+    @staticmethod
+    def analyze_fraud_by_hour() -> Dict[str, Any]:
+        """Analyze fraud patterns by hour of day"""
+        return {
+            str(hour): {
+                "fraud_rate": rate * CONFIG.BASE_FRAUD_RATE,
+                "activity_level": "high" if rate > 0.7 else "medium" if rate > 0.3 else "low"
+            }
+            for hour, rate in event_generator.hourly_patterns.items()
+        }
+    
+    @staticmethod
+    def analyze_fraud_by_device() -> Dict[str, Any]:
+        """Analyze fraud patterns by device type"""
+        return {
+            "iOS": {"fraud_rate": 0.015, "count": random.randint(300, 500)},
+            "Android": {"fraud_rate": 0.025, "count": random.randint(250, 450)},
+            "Web-Chrome": {"fraud_rate": 0.030, "count": random.randint(400, 600)},
+            "Web-Safari": {"fraud_rate": 0.020, "count": random.randint(200, 350)},
+            "POS": {"fraud_rate": 0.010, "count": random.randint(150, 250)}
+        }
+    
+    @staticmethod
+    def generate_fraud_alerts() -> List[Dict[str, Any]]:
+        """Generate current fraud alerts"""
+        alerts = []
+        
+        # High fraud rate alert
+        global_metrics = stream_manager.get_global_metrics()
+        if global_metrics["fraud_rate"] > 0.05:
+            alerts.append({
+                "alert_id": str(uuid.uuid4()),
+                "type": "high_fraud_rate",
+                "severity": "high",
+                "message": f"Elevated fraud rate detected: {global_metrics['fraud_rate']:.2%}",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "metadata": {
+                    "current_rate": global_metrics["fraud_rate"],
+                    "threshold": 0.05
+                }
+            })
+        
+        # Stream limit alert
+        if global_metrics["active_streams"] > CONFIG.MAX_CONCURRENT_STREAMS * 0.8:
+            alerts.append({
+                "alert_id": str(uuid.uuid4()),
+                "type": "stream_capacity",
+                "severity": "medium",
+                "message": f"Approaching stream capacity limit: {global_metrics['active_streams']}/{CONFIG.MAX_CONCURRENT_STREAMS}",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "metadata": {
+                    "active_streams": global_metrics["active_streams"],
+                    "max_streams": CONFIG.MAX_CONCURRENT_STREAMS
+                }
+            })
+        
+        return alerts
 
 @router.get(
     "/analytics",
@@ -671,86 +836,35 @@ async def get_stream_analytics(
     
     try:
         global_metrics = stream_manager.get_global_metrics()
+        analytics = FraudAnalytics()
         
         # Calculate time-based analytics
         current_time = datetime.utcnow()
         window_start = current_time - timedelta(seconds=time_window)
         
-        # Generate sample analytics (in production, query actual data)
-        analytics = {
+        return {
             "time_window": time_window,
             "current_time": current_time.isoformat() + "Z",
             "window_start": window_start.isoformat() + "Z",
             "global_metrics": global_metrics,
             "fraud_patterns": {
-                "by_location": self._analyze_fraud_by_location(),
-                "by_amount_range": self._analyze_fraud_by_amount(),
-                "by_hour": self._analyze_fraud_by_hour(),
-                "by_device_type": self._analyze_fraud_by_device()
+                "by_location": analytics.analyze_fraud_by_location(),
+                "by_amount_range": analytics.analyze_fraud_by_amount(),
+                "by_hour": analytics.analyze_fraud_by_hour(),
+                "by_device_type": analytics.analyze_fraud_by_device()
             },
             "performance": {
                 "average_batch_size": CONFIG.BATCH_SIZE,
                 "current_throughput": THROUGHPUT_EVENTS_PER_SECOND._value.get() or 0,
                 "peak_throughput": 12000,  # Would be calculated from historical data
-                "latency_ms": 1.2
+                "latency_ms": round(CONFIG.BATCH_INTERVAL_MS, 2)
             },
-            "alerts": self._generate_fraud_alerts()
+            "alerts": analytics.generate_fraud_alerts()
         }
-        
-        return analytics
         
     except Exception as e:
         logger.error(f"Analytics endpoint failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to get analytics")
-
-def _analyze_fraud_by_location(self) -> Dict[str, Any]:
-    """Analyze fraud patterns by location"""
-    location_stats = {}
-    for location in CONFIG.LOCATION_FRAUD_RATES:
-        fraud_rate = CONFIG.LOCATION_FRAUD_RATES[location]
-        location_stats[location] = {
-            "fraud_rate": fraud_rate,
-            "risk_level": "high" if fraud_rate > 0.02 else "medium" if fraud_rate > 0.015 else "low"
-        }
-    return location_stats
-
-def _analyze_fraud_by_amount(self) -> Dict[str, Any]:
-    """Analyze fraud patterns by amount range"""
-    return {
-        "0-100": {"fraud_rate": 0.01, "count": 1000},
-        "100-500": {"fraud_rate": 0.02, "count": 800},
-        "500-1000": {"fraud_rate": 0.04, "count": 300},
-        "1000+": {"fraud_rate": 0.08, "count": 150}
-    }
-
-def _analyze_fraud_by_hour(self) -> Dict[str, Any]:
-    """Analyze fraud patterns by hour of day"""
-    return {
-        str(hour): {"fraud_rate": rate * 0.02, "activity_level": "high" if rate > 0.7 else "medium"}
-        for hour, rate in event_generator.hourly_patterns.items()
-    }
-
-def _analyze_fraud_by_device(self) -> Dict[str, Any]:
-    """Analyze fraud patterns by device type"""
-    return {
-        "iOS": {"fraud_rate": 0.015, "count": 400},
-        "Android": {"fraud_rate": 0.025, "count": 350},
-        "Web-Chrome": {"fraud_rate": 0.03, "count": 500},
-        "POS": {"fraud_rate": 0.01, "count": 200}
-    }
-
-def _generate_fraud_alerts(self) -> List[Dict[str, Any]]:
-    """Generate current fraud alerts"""
-    return [
-        {
-            "alert_id": str(uuid.uuid4()),
-            "type": "spike_detection",
-            "severity": "medium",
-            "message": "Unusual activity detected in NY region",
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "metadata": {"location": "NY", "fraud_rate": 0.05}
-        }
-    ]
 
 # ===============================================================================
 # HEALTH CHECK ENDPOINT
@@ -769,6 +883,9 @@ async def health_check() -> Dict[str, Any]:
         # Generate test event to verify generator
         test_event = event_generator.generate_event()
         
+        # Check Redis connection
+        redis_status = "connected" if stream_manager.redis_client else "disconnected"
+        
         return {
             "status": "healthy",
             "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -777,11 +894,13 @@ async def health_check() -> Dict[str, Any]:
             "configuration": {
                 "batch_size": CONFIG.BATCH_SIZE,
                 "base_fraud_rate": CONFIG.BASE_FRAUD_RATE,
-                "max_concurrent_streams": CONFIG.MAX_CONCURRENT_STREAMS
+                "max_concurrent_streams": CONFIG.MAX_CONCURRENT_STREAMS,
+                "metrics_enabled": CONFIG.ENABLE_METRICS
             },
             "active_streams": len(stream_manager.active_streams),
             "test_event_generated": bool(test_event),
-            "redis_connected": stream_manager.redis_client is not None
+            "redis_status": redis_status,
+            "generator_events": event_generator.event_counter
         }
         
     except Exception as e:
@@ -808,7 +927,7 @@ def create_sample_fraud_event() -> Dict[str, Any]:
 __all__ = [
     "router",
     "FraudEvent",
-    "StreamManager",
+    "StreamManager", 
     "FraudEventGenerator",
     "create_sample_fraud_event"
 ]
