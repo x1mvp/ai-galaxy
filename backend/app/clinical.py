@@ -6,6 +6,7 @@ Version: 3.0.0
 Last Updated: 2026-01-15
 """
 
+import os
 import asyncio
 import json
 import logging
@@ -27,7 +28,11 @@ import redis.asyncio as redis
 from prometheus_client import Counter, Histogram, Gauge
 from sklearn.preprocessing import StandardScaler
 
-# Configure logging
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Router configuration
@@ -109,6 +114,26 @@ class ClinicalConfig:
     # Monitoring configuration
     ENABLE_METRICS: bool = os.getenv("ENABLE_METRICS", "true").lower() == "true"
     PREDICTION_LOGGING: bool = os.getenv("PREDICTION_LOGGING", "true").lower() == "true"
+    
+    @classmethod
+    def validate(cls) -> None:
+        """Validate configuration parameters"""
+        if not Path(cls.MODEL_PATH).exists():
+            raise RuntimeError(f"Model file not found: {cls.MODEL_PATH}")
+        
+        if not Path(cls.SHAP_PATH).exists():
+            raise RuntimeError(f"SHAP explainer file not found: {cls.SHAP_PATH}")
+        
+        # Validate risk thresholds
+        if not all(0 <= threshold <= 1 for threshold in cls.RISK_THRESHOLDS.values()):
+            raise ValueError("All risk thresholds must be between 0 and 1")
+
+# Validate configuration
+try:
+    ClinicalConfig.validate()
+except (RuntimeError, ValueError) as e:
+    logger.error(f"Configuration validation failed: {e}")
+    raise
 
 # Global configuration
 CONFIG = ClinicalConfig()
@@ -263,41 +288,73 @@ class ClinicalModelManager:
         self.feature_names = CONFIG.FEATURE_NAMES
         self.prediction_count = 0
         self.redis_client: Optional[redis.Redis] = None
-        self._load_models()
+        self._initialized = False
+        self._init_lock = asyncio.Lock()
+        
+        # Initialize models asynchronously
+        asyncio.create_task(self._load_models())
     
-    def _load_models(self):
-        """Load ML models with comprehensive error handling"""
+    async def _load_models(self):
+        """Load ML models with comprehensive error handling (async-safe)"""
+        if self._initialized:
+            return
+        
+        async with self._init_lock:
+            if self._initialized:
+                return
+            
+            try:
+                # Load main prediction model
+                model_path = Path(CONFIG.MODEL_PATH)
+                if not model_path.exists():
+                    raise FileNotFoundError(f"Model not found at {CONFIG.MODEL_PATH}")
+                
+                self.model = joblib.load(model_path)
+                logger.info(f"✅ Loaded prediction model from {CONFIG.MODEL_PATH}")
+                
+                # Load SHAP explainer
+                explainer_path = Path(CONFIG.SHAP_PATH)
+                if not explainer_path.exists():
+                    raise FileNotFoundError(f"SHAP explainer not found at {CONFIG.SHAP_PATH}")
+                
+                self.explainer = joblib.load(explainer_path)
+                logger.info(f"✅ Loaded SHAP explainer from {CONFIG.SHAP_PATH}")
+                
+                # Load scaler if available
+                scaler_path = Path(CONFIG.SCALER_PATH)
+                if scaler_path.exists():
+                    self.scaler = joblib.load(scaler_path)
+                    logger.info(f"✅ Loaded scaler from {CONFIG.SCALER_PATH}")
+                
+                # Validate model compatibility
+                self._validate_models()
+                
+                # Initialize Redis if caching enabled
+                if CONFIG.ENABLE_CACHING:
+                    await self._initialize_redis()
+                
+                ACTIVE_MODELS.inc()
+                self._initialized = True
+                
+            except Exception as e:
+                logger.error(f"❌ Failed to load models: {e}")
+                raise RuntimeError(f"Model loading failed: {str(e)}")
+    
+    async def _initialize_redis(self):
+        """Initialize Redis client for caching"""
         try:
-            # Load main prediction model
-            model_path = Path(CONFIG.MODEL_PATH)
-            if not model_path.exists():
-                raise FileNotFoundError(f"Model not found at {CONFIG.MODEL_PATH}")
-            
-            self.model = joblib.load(model_path)
-            logger.info(f"✅ Loaded prediction model from {CONFIG.MODEL_PATH}")
-            
-            # Load SHAP explainer
-            explainer_path = Path(CONFIG.SHAP_PATH)
-            if not explainer_path.exists():
-                raise FileNotFoundError(f"SHAP explainer not found at {CONFIG.SHAP_PATH}")
-            
-            self.explainer = joblib.load(explainer_path)
-            logger.info(f"✅ Loaded SHAP explainer from {CONFIG.SHAP_PATH}")
-            
-            # Load scaler if available
-            scaler_path = Path(CONFIG.SCALER_PATH)
-            if scaler_path.exists():
-                self.scaler = joblib.load(scaler_path)
-                logger.info(f"✅ Loaded scaler from {CONFIG.SCALER_PATH}")
-            
-            # Validate model compatibility
-            self._validate_models()
-            
-            ACTIVE_MODELS.inc()
-            
+            self.redis_client = redis.Redis(
+                host=os.getenv("REDIS_HOST", "localhost"),
+                port=int(os.getenv("REDIS_PORT", "6379")),
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5
+            )
+            await self.redis_client.ping()
+            logger.info("✅ Redis connected for caching")
         except Exception as e:
-            logger.error(f"❌ Failed to load models: {e}")
-            raise RuntimeError(f"Model loading failed: {str(e)}")
+            logger.warning(f"Redis not available: {e}")
+            self.redis_client = None
     
     def _validate_models(self):
         """Validate model compatibility and configuration"""
@@ -409,9 +466,22 @@ class ClinicalModelManager:
     
     async def predict_risk(self, vitals: Vitals) -> Tuple[RiskAssessment, SHAPExplanation]:
         """Perform comprehensive risk prediction with SHAP explanation"""
+        await self._initialize()  # Ensure models are loaded
+        
         start_time = time.time()
         
         try:
+            # Check cache first
+            if CONFIG.ENABLE_CACHING and self.redis_client:
+                cache_key = f"risk:{hash(str(vitals.dict()))}"
+                cached_result = await self.redis_client.get(cache_key)
+                if cached_result:
+                    cached_data = json.loads(cached_result)
+                    assessment = RiskAssessment(**cached_data['assessment'])
+                    shap_explanation = SHAPExplanation(**cached_data['shap'])
+                    logger.info(f"Cache hit for risk prediction")
+                    return assessment, shap_explanation
+            
             # Preprocess features
             features = self._preprocess_features(vitals)
             
@@ -451,6 +521,20 @@ class ClinicalModelManager:
                 timestamp=datetime.utcnow().isoformat() + "Z",
                 patient_id=vitals.patient_id
             )
+            
+            # Cache result
+            if CONFIG.ENABLE_CACHING and self.redis_client:
+                try:
+                    await self.redis_client.setex(
+                        cache_key, 
+                        CONFIG.CACHE_TTL, 
+                        json.dumps({
+                            'assessment': assessment.to_dict(),
+                            'shap': shap_explanation.to_dict()
+                        })
+                    )
+                except Exception as e:
+                    logger.warning(f"Cache storage failed: {e}")
             
             # Update metrics
             self.prediction_count += 1
@@ -511,7 +595,7 @@ class ClinicalModelManager:
     def get_model_info(self) -> Dict[str, Any]:
         """Get model information and statistics"""
         return {
-            "model_type": type(self.model).__name__,
+            "model_type": type(self.model).__name__ if self.model else "Not loaded",
             "feature_count": len(self.feature_names),
             "feature_names": self.feature_names,
             "risk_thresholds": CONFIG.RISK_THRESHOLDS,
@@ -519,7 +603,8 @@ class ClinicalModelManager:
             "model_loaded": self.model is not None,
             "explainer_loaded": self.explainer is not None,
             "scaler_loaded": self.scaler is not None,
-            "clinical_ranges": CONFIG.CLINICAL_RANGES
+            "clinical_ranges": CONFIG.CLINICAL_RANGES,
+            "redis_connected": self.redis_client is not None
         }
 
 # Global model manager
@@ -531,7 +616,9 @@ model_manager = ClinicalModelManager()
 
 def get_authentication(pwd: str = Header(..., alias="X-API-Key")) -> bool:
     """API key authentication"""
-    if pwd != os.getenv("API_PASSWORD", "clinical2026"):
+    api_password = os.getenv("API_PASSWORD", "clinical2026")
+    if pwd != api_password:
+        logger.warning(f"Invalid API key attempt: {pwd[:8]}...")
         raise HTTPException(status_code=401, detail="Invalid API key")
     return True
 
@@ -645,6 +732,7 @@ async def full_risk_assessment(
 async def health_check() -> Dict[str, Any]:
     """Health check for clinical predictor service"""
     try:
+        await model_manager._load_models()  # Ensure models are loaded
         model_info = model_manager.get_model_info()
         
         # Test prediction with sample data
@@ -687,6 +775,7 @@ async def health_check() -> Dict[str, Any]:
 async def get_model_info() -> Dict[str, Any]:
     """Get comprehensive model information"""
     try:
+        await model_manager._load_models()  # Ensure models are loaded
         model_info = model_manager.get_model_info()
         
         # Add additional statistics
@@ -734,8 +823,10 @@ async def batch_risk_assessment(
                 detail="Batch size too large (max 50 patients)"
             )
         
+        await model_manager._load_models()  # Ensure models are loaded
+        
         results = []
-        for vitals in vitals_list:
+        for i, vitals in enumerate(vitals_list):
             assessment, shap_explanation = await model_manager.predict_risk(vitals)
             
             clinical_assessment = model_manager._generate_clinical_assessment(
@@ -756,7 +847,8 @@ async def batch_risk_assessment(
                     shap=shap_explanation,
                     metadata={
                         "patient_id": vitals.patient_id,
-                        "batch_index": len(results)
+                        "batch_index": i,
+                        "batch_size": len(vitals_list)
                     },
                     processing_time_ms=assessment.prediction_time_ms
                 )
@@ -781,6 +873,8 @@ async def batch_risk_assessment(
 async def get_service_stats() -> Dict[str, Any]:
     """Get service statistics and performance metrics"""
     try:
+        await model_manager._load_models()  # Ensure models are loaded
+        
         return {
             "service": "clinical_risk_predictor",
             "version": "3.0.0",
@@ -800,6 +894,24 @@ async def get_service_stats() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Stats endpoint failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to get statistics")
+
+# ===============================================================================
+# VALIDATION UTILITY
+# ===============================================================================
+
+def validate_vitals_ranges(vitals: Vitals) -> List[str]:
+    """Validate vitals against clinical ranges and return warnings"""
+    warnings = []
+    
+    for feature, (min_val, max_val) in CONFIG.CLINICAL_RANGES.items():
+        value = getattr(vitals, feature)
+        if value < min_val or value > max_val:
+            warnings.append(
+                f"{feature.replace('_', ' ').title()} ({value}) "
+                f"outside normal range ({min_val}-{max_val})"
+            )
+    
+    return warnings
 
 # ===============================================================================
 # EXCEPTION HANDLERS
@@ -840,24 +952,6 @@ async def general_exception_handler(request: Request, exc: Exception):
             "timestamp": datetime.utcnow().isoformat() + "Z"
         }
     )
-
-# ===============================================================================
-# VALIDATION UTILITY
-# ===============================================================================
-
-def validate_vitals_ranges(vitals: Vitals) -> List[str]:
-    """Validate vitals against clinical ranges and return warnings"""
-    warnings = []
-    
-    for feature, (min_val, max_val) in CONFIG.CLINICAL_RANGES.items():
-        value = getattr(vitals, feature)
-        if value < min_val or value > max_val:
-            warnings.append(
-                f"{feature.replace('_', ' ').title()} ({value}) "
-                f"outside normal range ({min_val}-{max_val})"
-            )
-    
-    return warnings
 
 # Export for testing
 __all__ = [
