@@ -3,27 +3,21 @@
 # Python: 3.11   Environment: Production
 # ============================================================================
 #
-# CHANGES FROM PREVIOUS FILE:
-#   - Merged three concatenated blocks into one authoritative file
-#   - Resolved all version conflicts (single version per package)
-#   - Removed nonexistent packages: asyncpg-pool, python-csv, fastapi-cors,
-#     fastapi-security, pydantic-openapi, postman, logrotate, pathlib, uuid
-#   - Removed stdlib packages that cannot be pip-installed on Python 3.11:
-#     pathlib (stdlib 3.4+), uuid (stdlib 3.3+), csv (always stdlib)
-#   - Removed infrastructure tools that belong in Docker/infra, not pip:
-#     supervisor, glances, logrotate
-#   - Deduplicated: asyncpg, pgvector, openai, transformers, httpx, orjson,
-#     memory-profiler, pydantic/pydantic[email]
-#   - Removed useless Python <3.7 markers (project targets 3.11)
+# v3 fixes (from CI log):
+#   - tokenizers==0.20.0 → unpinned: transformers==4.44.2 requires <0.20
+#   - pydantic[email]==2.9.1 → pydantic[email]>=2.9.0: conflicts with
+#     pydantic-core==2.46.3 that fastapi==0.136.1 resolves to
+#   - typing-extensions==4.12.2 → >=4.12.2: CI step 1 resolves to 4.15.0,
+#     hard pin caused silent downgrade
 # ============================================================================
 
 # --- Web framework -----------------------------------------------------------
 fastapi==0.136.1
-starlette==1.0.0                        # must match fastapi-0.136.1's requirement
+starlette==1.0.0
 uvicorn[standard]==0.34.0
 
 # --- Database & vector search ------------------------------------------------
-asyncpg==0.29.0                         # async PostgreSQL driver; pool via asyncpg.create_pool()
+asyncpg==0.29.0
 pgvector==0.2.4
 sqlalchemy[asyncio]==2.0.31
 alembic==1.13.2
@@ -40,7 +34,7 @@ joblib==1.4.2
 
 # --- NLP & transformers ------------------------------------------------------
 transformers==4.44.2
-tokenizers==0.20.0
+tokenizers>=0.19,<0.20                  # FIX 1: transformers==4.44.2 requires <0.20
 torch==2.4.0
 torchtext==0.18.0
 
@@ -56,7 +50,7 @@ celery==5.4.0
 kombu==5.3.4
 
 # --- Validation & serialisation ----------------------------------------------
-pydantic[email]==2.9.1                  # [email] extra covers both pydantic + email-validator
+pydantic[email]>=2.9.0,<3.0.0          # FIX 2: unpinned so fastapi resolves pydantic-core
 pydantic-settings==2.5.2
 annotated-types>=0.6.0
 
@@ -125,7 +119,7 @@ python-dateutil==2.9.0.post0
 pytz==2024.2
 regex==2024.9.11
 requests==2.32.3
-typing-extensions==4.12.2
+typing-extensions>=4.12.2              # FIX 3: >= avoids downgrade from 4.15.0
 
 # --- Process & resource monitoring -------------------------------------------
 psutil==6.0.0
