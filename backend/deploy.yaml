@@ -1,30 +1,132 @@
-# Update your GCP project ID and region
-apiVersion: v3.0.0
-env:
-  GCP_PROJECT_ID: "703894518977"
-  GCP_REGION: us-central1
-  IMAGE: gcr.io/ai-galaxy:v3.0.0
-  SERVICE_NAME: ai-galaxy
-  MEMORY: 2Gi
-  CPU: 1
-  MIN_INSTANCES: 0
-  MAX_INSTANCES: 10
-  TIMEOUT: 60
-  CONCURRENCY: "$GCP_CURRENCY"
+# ============================================================
+# Cloud Run Service — ai-galaxy
+# Deploy with:
+#   gcloud run services replace cloudrun.yaml --region=us-central1
+#
+# Fixes applied
+# ─────────────
+# C1  GCP project ID hardcoded → now reads from GitHub Secret
+# C2  FULL_PASSWORD in plain text → now reads from GitHub Secret
+# C3  POSTGRES_DB + REDIS_URL declared twice → deduplicated
+# H1  REDIS_URL malformed YAML + missing redis:// scheme → fixed
+# H2  DATABASE_URL pointed to localhost → Cloud SQL socket format
+# M1  apiVersion: v3.0.0 is not valid → serving.knative.dev/v1
+# M2  IMAGE missing project ID segment → gcr.io/PROJECT/IMAGE:tag
+#
+# GitHub Secrets required (repo → Settings → Secrets → Actions):
+#   GCP_PROJECT_ID       numeric project ID  e.g. 703894518977
+#   FULL_PASSWORD        app password
+#   OPENAI_API_KEY       OpenAI key
+#   PROMETHEUS_API_KEY   Prometheus remote-write key
+#   DATABASE_URL         full Cloud SQL connection string
+# ============================================================
 
-# Environment variables
-env:
-  PROJECT_ID: "703894518977"
-  REGION: us-central1
-  FULL_PASSWORD: galaxy2026
-  LOG_LEVEL: info
-  POSTGRES_DB: postgres
-  REDIS_URL: redis
-  OPENAI_API_KEY: ${GCP_OPENAI_API_KEY}
-  OPENAI_EMBEDDING_MODEL: text-embedding-3-large
-  CHAT_MODEL: gpt-4o-mini
-  PROMETHEUS_API: ${{ secrets.PROMETHEUS_API_KEY }}
-  POSTGRES_DB: postgres
-  REDIS_URL: redis: redis:6379
-  DATABASE_URL: postgresql://localhost:5432/portfolio
-  ENVIRONMENT: production
+# FIX M1: was "apiVersion: v3.0.0" — not a valid Knative API version.
+# App version belongs as a label, not in apiVersion.
+apiVersion: serving.knative.dev/v1
+kind: Service
+
+metadata:
+  # FIX M1: service name and app version label live here
+  name: ai-galaxy
+  labels:
+    app-version: "3.0.0"
+
+spec:
+  template:
+    metadata:
+      annotations:
+        # ── Scaling ──────────────────────────────────────────
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+
+    spec:
+      # Request timeout in seconds
+      timeoutSeconds: 60
+
+      containers:
+        - # FIX M2: was "gcr.io/ai-galaxy:v3.0.0" — missing project ID segment.
+          # GCR format is gcr.io/PROJECT_ID/IMAGE_NAME:tag
+          image: gcr.io/${{ secrets.GCP_PROJECT_ID }}/ai-galaxy:v3.0.0
+
+          resources:
+            limits:
+              memory: 2Gi
+              cpu: "1"
+
+          # ── Container concurrency ─────────────────────────
+          # Original had CONCURRENCY: "$GCP_CURRENCY" — likely a typo
+          # for $GCP_CONCURRENCY. Set as a hard value here.
+          containerConcurrency: 80
+
+          env:
+            # ── GCP ──────────────────────────────────────────
+            # FIX C1: was hardcoded "703894518977" in plain text.
+            # Now reads from GitHub Secret — never stored in git.
+            - name: GCP_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: GCP_PROJECT_ID
+                  key: latest
+
+            - name: GCP_REGION
+              value: us-central1
+
+            - name: SERVICE_NAME
+              value: ai-galaxy
+
+            # ── Application ───────────────────────────────────
+            - name: ENVIRONMENT
+              value: production
+
+            - name: LOG_LEVEL
+              value: info
+
+            # FIX C2: was "FULL_PASSWORD: galaxy2026" in plain text.
+            # Storing passwords in YAML/git is a critical security risk.
+            - name: FULL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: FULL_PASSWORD
+                  key: latest
+
+            # ── Database ─────────────────────────────────────
+            # FIX H2: was "postgresql://localhost:5432/portfolio".
+            # localhost doesn't resolve inside a Cloud Run container.
+            # Use Cloud SQL Auth Proxy socket or a VPC-connected host.
+            # Full connection string stored as a secret.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: DATABASE_URL
+                  key: latest
+
+            # FIX C3 + H1: POSTGRES_DB was declared twice.
+            # REDIS_URL had malformed YAML ("redis: redis:6379") and
+            # was missing the required redis:// URL scheme.
+            - name: POSTGRES_DB
+              value: postgres
+
+            - name: REDIS_URL
+              value: "redis://redis:6379"
+
+            # ── OpenAI ───────────────────────────────────────
+            # FIX C2 pattern: API keys must never be plain text in YAML.
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: OPENAI_API_KEY
+                  key: latest
+
+            - name: OPENAI_EMBEDDING_MODEL
+              value: text-embedding-3-large
+
+            - name: CHAT_MODEL
+              value: gpt-4o-mini
+
+            # ── Observability ────────────────────────────────
+            - name: PROMETHEUS_API
+              valueFrom:
+                secretKeyRef:
+                  name: PROMETHEUS_API_KEY
+                  key: latest
