@@ -1,59 +1,24 @@
 version: '3.8'
 
 services:
-  portfolio-api:
-    build:
-      context: .
-      target: production
-      args:
-        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
-        VERSION: ${VERSION:-latest}
-        VCS_REF: ${VCS_REF:-unknown}
-        COMMIT_HASH: ${COMMIT_HASH:-unknown}
-    ports:
-      - "8080:8080"
-    environment:
-      - ENVIRONMENT=production
-      - LOG_LEVEL=INFO
-      - DATABASE_URL=postgresql://portfolio:password@postgres:5432/portfolio
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      - postgres
-      - redis
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    volumes:
-      - ./logs:/app/logs
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '0.5'
-        reservations:
-          memory: 512M
-          cpus: '0.25'
-
   postgres:
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: portfolio
-      POSTGRES_USER: portfolio
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init-db:/docker-entrypoint-initdb.d
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U portfolio"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "pg_isready", "-U", "postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   redis:
     image: redis:7-alpine
@@ -63,21 +28,29 @@ services:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  nginx:
-    image: nginx:alpine
+  api:
+    build: ./backend
+    environment:
+      - FULL_PASSWORD=galaxy2026
+      - PGVECTOR_URL=postgresql://postgres:5432/postgres
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=your_openai_api_key_here
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./ssl:/etc/nginx/ssl
+      - "8000:8000"
     depends_on:
-      - portfolio-api
-    restart: unless-stopped
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   postgres_data:

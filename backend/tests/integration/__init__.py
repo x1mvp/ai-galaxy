@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-﻿"""Test package for x1mvp Portfolio API."""
-=======
 """Integration tests for NLP Classification Service.
 
 These tests exercise the full request/response cycle against the real
@@ -210,4 +207,3 @@ class TestDatabaseIntegration:
     def test_placeholder_vector_search(self):
         """Replace with pgvector similarity search round-trip test."""
         pytest.skip("Database not configured — set TEST_DATABASE_URL to enable")
->>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b

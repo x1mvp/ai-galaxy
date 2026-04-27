@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 ﻿"""
+=======
+"""
+>>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
 app/routers/fraud.py
 
 Fraud Detection module router.
@@ -49,6 +53,7 @@ class FraudDetectionResponse(BaseModel):
     processing_time: float
 
 # Endpoints
+<<<<<<< HEAD
 @router.get("/health")
 async def fraud_health():
     """Fraud detection service health check"""
@@ -59,6 +64,8 @@ async def fraud_health():
         "version": "1.0.0"
     }
 
+=======
+>>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
 @router.post("/analyze", response_model=FraudDetectionResponse)
 async def analyze_transaction(
     transaction: TransactionData,
@@ -158,3 +165,16 @@ async def analyze_transaction(
     except Exception as e:
         logger.error(f"Fraud analysis failed: {e}")
         raise HTTPException(status_code=500, detail=f"Fraud analysis failed: {str(e)}")
+<<<<<<< HEAD
+=======
+
+@router.get("/health")
+async def fraud_health():
+    """Fraud detection service health check"""
+    return {
+        "service": "Fraud Detection",
+        "status": "healthy",
+        "features": ["transaction_analysis", "risk_scoring"],
+        "version": "1.0.0"
+    }
+>>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b

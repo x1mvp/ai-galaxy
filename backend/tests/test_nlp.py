@@ -2,10 +2,11 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from app.main import app
 from app.nlp import TextPayload, PredictionResult
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -104,10 +105,7 @@ class TestFullEndpoint:
         assert data["demo"] is False
         assert len(data["predictions"]) == 2
 
-        # Verify the model was called with the correct input.
-        mock_model_manager.predict_single.assert_called_once_with(
-            payload["text"]
-        )
+        mock_model_manager.predict_single.assert_called_once_with(payload["text"])
 
     def test_prediction_schema_on_full_endpoint(self, client, auth_headers, mock_model_manager):
         response = client.post(

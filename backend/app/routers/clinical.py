@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 ﻿"""
+=======
+"""
+>>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
 app/routers/clinical.py
 
 Clinical Analytics module router.
@@ -50,6 +54,7 @@ class ClinicalAssessmentResponse(BaseModel):
     processing_time: float
 
 # Endpoints
+<<<<<<< HEAD
 @router.get("/health")
 async def clinical_health():
     """Clinical analytics service health check"""
@@ -60,6 +65,8 @@ async def clinical_health():
         "version": "1.0.0"
     }
 
+=======
+>>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
 @router.post("/assess", response_model=ClinicalAssessmentResponse)
 async def assess_patient_risk(
     patient: PatientData,
@@ -191,3 +198,16 @@ async def assess_patient_risk(
     except Exception as e:
         logger.error(f"Clinical assessment failed: {e}")
         raise HTTPException(status_code=500, detail=f"Clinical assessment failed: {str(e)}")
+<<<<<<< HEAD
+=======
+
+@router.get("/health")
+async def clinical_health():
+    """Clinical analytics service health check"""
+    return {
+        "service": "Clinical Analytics",
+        "status": "healthy",
+        "features": ["risk_assessment", "patient_analytics"],
+        "version": "1.0.0"
+    }
+>>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b

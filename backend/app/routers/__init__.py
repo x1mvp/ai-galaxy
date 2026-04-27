@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 ﻿"""
+=======
+"""
+>>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
 app/routers/__init__.py
 
 Routers package initialization.

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 ﻿"""
+=======
+"""
+>>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
 app/routers/crm.py
 
 CRM (Customer Relationship Management) module router.
@@ -47,6 +51,7 @@ class LeadScoringResponse(BaseModel):
     processing_time: float
 
 # Endpoints
+<<<<<<< HEAD
 @router.get("/health")
 async def crm_health():
     """CRM service health check"""
@@ -57,6 +62,8 @@ async def crm_health():
         "version": "1.0.0"
     }
 
+=======
+>>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
 @router.post("/lead-score", response_model=LeadScoringResponse)
 async def score_lead(
     lead_data: LeadData,
@@ -139,3 +146,16 @@ async def score_lead(
     except Exception as e:
         logger.error(f"Lead scoring failed: {e}")
         raise HTTPException(status_code=500, detail=f"Lead scoring failed: {str(e)}")
+<<<<<<< HEAD
+=======
+
+@router.get("/health")
+async def crm_health():
+    """CRM service health check"""
+    return {
+        "service": "CRM",
+        "status": "healthy",
+        "features": ["lead_scoring", "customer_segmentation"],
+        "version": "1.0.0"
+    }
+>>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
