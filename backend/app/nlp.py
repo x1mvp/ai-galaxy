@@ -91,9 +91,20 @@ class ModelConfig:
         if cls.MAX_LENGTH <= 0 or cls.MAX_LENGTH > 512:
             raise ValueError("MAX_LENGTH must be between 1 and 512")
 
-# Validate configuration on import
-ModelConfig.validate()
 
+class ModelConfig:
+    MODEL_PATH = Path(os.getenv("ONNX_MODEL_PATH", "/app/models/bert.onnx"))
+
+    @classmethod
+    def validate(cls) -> None:
+        # Skip validation in test/CI environments
+        if os.getenv("TESTING", "false").lower() == "true":
+            return
+        if not cls.MODEL_PATH.exists():
+            raise RuntimeError(
+                f"ONNX model not found at {cls.MODEL_PATH}. "
+                "See README for model conversion steps."
+            )
 # ===============================================================================
 # DATA MODELS
 # ===============================================================================
