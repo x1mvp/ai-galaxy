@@ -29,8 +29,6 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 # breaking FastAPI DI, singleton models, and pytest fixtures.
 # Absolute imports below work correctly without any sys.path manipulation.
 # ─────────────────────────────────────────────────────────────────────────────
-from app.nlp import model_manager
-
 
 # =============================================================================
 # FIX C1 + M1 — Logging
