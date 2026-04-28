@@ -1,5 +1,5 @@
 """
-app.nlp – Model manager stub.
+app.nlp - Model manager stub.
 
 In CI (TESTING=1 or TESTING=true), load() is a no-op so no model file
 or network access is required. In production, replace the body of load()
@@ -21,10 +21,6 @@ class ModelManager:
         self._start_time: float | None = None
         self._model: Any = None
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
     def load(self) -> None:
         """Load the model. Skipped entirely when TESTING env var is set."""
         if os.getenv("TESTING", "").lower() in ("1", "true", "yes"):
@@ -32,9 +28,6 @@ class ModelManager:
             self._start_time = time.monotonic()
             return
 
-        # TODO: replace with real loading logic, e.g.:
-        # from transformers import pipeline
-        # self._model = pipeline("text-classification", model="path/to/model")
         raise NotImplementedError(
             "Real model loading is not yet implemented. "
             "Set TESTING=1 to run in CI/test mode."
@@ -45,10 +38,6 @@ class ModelManager:
         self.is_loaded = False
         self._start_time = None
 
-    # ------------------------------------------------------------------
-    # Inference
-    # ------------------------------------------------------------------
-
     def predict(self, text: str) -> list[dict]:
         """
         Run inference. Returns a list of dicts with 'label' and 'prob' keys.
@@ -56,17 +45,8 @@ class ModelManager:
         """
         if not self.is_loaded:
             raise RuntimeError("Model is not loaded. Call load() first.")
-
         self.request_count += 1
-
-        # TODO: replace with real inference, e.g.:
-        # results = self._model(text)
-        # return [{"label": r["label"], "prob": r["score"]} for r in results]
         return []
-
-    # ------------------------------------------------------------------
-    # Observability
-    # ------------------------------------------------------------------
 
     def get_stats(self) -> dict:
         uptime = (
@@ -88,11 +68,9 @@ class ModelManager:
         }
 
 
-# Module-level singleton — this is what everything imports
 model_manager = ModelManager()
 
 
-# Optional: a cached wrapper around predict for hot paths
 @lru_cache(maxsize=1000)
 def _cached_predict(text: str) -> tuple:
     return tuple(model_manager.predict(text))
