@@ -1,1 +1,1 @@
-﻿""Test package for x1mvp Portfolio API."""
+"""Test package for x1mvp Portfolio API."""

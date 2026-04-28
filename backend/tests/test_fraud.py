@@ -1,4 +1,4 @@
-﻿""
+"""
 Tests for Fraud Detection module endpoints.
 """
 
@@ -25,7 +25,7 @@ def test_fraud_analysis(test_client):
         "account_age_days": 365,
         "transaction_frequency": 5
     }
-    
+
     response = test_client.post("/Fraud/analyze", json=payload)
     assert response.status_code == 200
     data = response.json()

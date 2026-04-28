@@ -1,4 +1,4 @@
-﻿""
+"""
 Tests for Clinical Analytics module endpoints.
 """
 
@@ -26,7 +26,7 @@ def test_clinical_assessment(test_client):
         "smoking_status": "Never",
         "exercise_frequency": "Moderate"
     }
-    
+
     response = test_client.post("/Clinical/assess", json=payload)
     assert response.status_code == 200
     data = response.json()

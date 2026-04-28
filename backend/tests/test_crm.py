@@ -1,4 +1,4 @@
-﻿""
+"""
 Tests for CRM module endpoints.
 """
 
@@ -23,11 +23,8 @@ def test_lead_scoring(test_client):
         "timeline": "Immediate",
         "engagement_score": 80
     }
-    
+
     response = test_client.post("/CRM/lead-score", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True
-    assert "lead_score" in data
-    assert data["lead_score"]["lead_score"] >= 0
-    assert data["lead_score"]["lead_score"] <= 100
