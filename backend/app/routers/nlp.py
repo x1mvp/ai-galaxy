@@ -1,4 +1,5 @@
 
+"""
 app/nlp.py - NLP model manager and router.
 
 Production-ready multi-label text classification with BERT ONNX.
