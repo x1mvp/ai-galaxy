@@ -51,7 +51,7 @@ kombu==5.3.4
 
 # --- Validation & serialisation ----------------------------------------------
 pydantic[email]>=2.9.0,<3.0.0          # FIX 2: unpinned so fastapi resolves pydantic-core
-pydantic-settings==2.5.2
+pydantic-settings>=2.0
 annotated-types>=0.6.0
 
 # --- Logging & monitoring ----------------------------------------------------
