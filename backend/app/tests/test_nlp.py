@@ -1,4 +1,4 @@
-"""Tests for NLP Classification Service"""
+﻿""Tests for NLP Classification Service"""
 
 import pytest
 from fastapi.testclient import TestClient

@@ -1,4 +1,4 @@
-"""
+﻿""
 Integration tests for the entire application.
 """
 

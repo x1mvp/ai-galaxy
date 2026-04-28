@@ -1,4 +1,4 @@
-﻿"""
+﻿""
 Tests for Fraud Detection module endpoints.
 """
 

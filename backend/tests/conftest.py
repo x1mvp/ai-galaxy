@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+﻿<<<<<< HEAD
 ﻿"""tests/conftest.py — minimal fixtures using real routers."""
 
 import pytest

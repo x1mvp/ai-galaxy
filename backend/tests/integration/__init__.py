@@ -1,4 +1,4 @@
-"""Integration tests for NLP Classification Service.
+﻿""Integration tests for NLP Classification Service.
 
 These tests exercise the full request/response cycle against the real
 application without mocking internals.  They do NOT require a live database

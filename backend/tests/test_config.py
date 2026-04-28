@@ -1,4 +1,4 @@
-"""NLP types, model manager, and shared prediction logic."""
+﻿""NLP types, model manager, and shared prediction logic."""
 
 from __future__ import annotations
 
