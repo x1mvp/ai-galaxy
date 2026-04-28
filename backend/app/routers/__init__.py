@@ -1,14 +1,7 @@
-<<< HEAD
--"""
-=======
 """
->>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
-app/routers/__init__.py
-
-Routers package initialization.
+x1mvp Portfolio - Router package.
 Exports all router modules for easy import in main application.
 """
-
 from .crm import router as crm_router
 from .fraud import router as fraud_router
 from .clinical import router as clinical_router
