@@ -1,5 +1,5 @@
-﻿
-app/nlp.py — NLP model manager and router.
+
+app/nlp.py - NLP model manager and router.
 
 Production-ready multi-label text classification with BERT ONNX.
 """
@@ -90,10 +90,10 @@ class ModelConfig:
         Check that the ONNX model file exists on disk.
 
         Skipped automatically when TESTING=true (CI / unit tests).
-        Only called from ModelManager.load() — never at module level.
+        Only called from ModelManager.load() - never at module level.
         """
         if os.getenv("TESTING", "false").lower() == "true":
-            # CI runners don't have the model file — skip the check entirely.
+            # CI runners don't have the model file - skip the check entirely.
             logger.info("TESTING=true: skipping model file validation")
             return
 
@@ -170,7 +170,7 @@ class HealthResponse(BaseModel):
 class ModelManager:
     """
     Owns the ONNX session and tokenizer lifecycle.
-    load() / unload() are called by the FastAPI lifespan hook — never at
+    load() / unload() are called by the FastAPI lifespan hook - never at
     import time and never during test collection.
     """
 
@@ -187,7 +187,7 @@ class ModelManager:
         Validate config, then load the ONNX session and tokenizer.
         Called once at server startup by the lifespan context manager.
         """
-        ModelConfig.validate()   # ← only called here, never at module level
+        ModelConfig.validate()   # - only called here, never at module level
 
         if os.getenv("TESTING", "false").lower() == "true":
             # In test mode validate() already returned early above.
@@ -229,10 +229,10 @@ class ModelManager:
                 self._tokenizer = AutoTokenizer.from_pretrained(ModelConfig.TOKENIZER_NAME)
             
             self.is_loaded = True
-            logger.info("✅ Model and tokenizer loaded successfully")
+            logger.info("- Model and tokenizer loaded successfully")
 
         except Exception as exc:
-            logger.error(f"❌ Failed to load model: {exc}")
+            logger.error(f"- Failed to load model: {exc}")
             raise RuntimeError(f"Failed to load NLP model: {exc}") from exc
 
     def unload(self) -> None:
@@ -248,7 +248,7 @@ class ModelManager:
         Falls back to deterministic mock scores when TESTING=true.
         """
         if os.getenv("TESTING", "false").lower() == "true":
-            # Deterministic mock — lets unit tests assert on real values
+            # Deterministic mock - lets unit tests assert on real values
             # without needing the model file.
             return [
                 {"label": "Technology", "score": 0.91},

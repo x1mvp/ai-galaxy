@@ -1,4 +1,4 @@
-﻿ckend/tests/conftest.py
+ckend/tests/conftest.py
 import os
 import pytest
 from unittest.mock import MagicMock, patch
@@ -11,7 +11,7 @@ os.environ["TESTING"] = "true"
 def mock_model_manager():
     """
     Patch model_manager so tests never need the real bert.onnx file.
-    autouse=True means every test gets this automatically — no decorator needed.
+    autouse=True means every test gets this automatically - no decorator needed.
     """
     mock_manager = MagicMock()
     mock_manager.is_loaded = True

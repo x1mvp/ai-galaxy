@@ -1,4 +1,4 @@
-﻿ests for NLP Classification Service"""
+ests for NLP Classification Service"""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,7 +13,7 @@ from app.nlp import TextPayload, PredictionResult
 
 @pytest.fixture()
 def client():
-    """Fresh TestClient per test — prevents state bleed between tests."""
+    """Fresh TestClient per test - prevents state bleed between tests."""
     with TestClient(app) as c:
         yield c
 
@@ -44,7 +44,7 @@ def mock_model_manager():
 # ---------------------------------------------------------------------------
 
 class TestDemoEndpoint:
-    """POST /nlp/demo — no auth required, rate-limited."""
+    """POST /nlp/demo - no auth required, rate-limited."""
 
     def test_success_returns_200_and_predictions(self, client):
         response = client.post("/nlp/demo", json={"text": "This is a test message"})
@@ -93,7 +93,7 @@ class TestDemoEndpoint:
 # ---------------------------------------------------------------------------
 
 class TestFullEndpoint:
-    """POST /nlp/full — requires API key authentication."""
+    """POST /nlp/full - requires API key authentication."""
 
     def test_success_with_valid_auth(self, client, auth_headers, mock_model_manager):
         payload = {"text": "Technology news and updates"}

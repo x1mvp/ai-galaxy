@@ -1,4 +1,4 @@
-﻿pplication configuration — all values sourced from environment variables."""
+pplication configuration - all values sourced from environment variables."""
 
 import os
 import logging
@@ -29,7 +29,7 @@ class Settings:
     )
     POSTGRES_DB: str = os.getenv("POSTGRES_DB", "portfolio")
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
-    # No default — must be set in every environment.
+    # No default - must be set in every environment.
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "")
     POSTGRES_HOST_AUTH_METHOD: str = os.getenv(
         "POSTGRES_HOST_AUTH_METHOD", "scram-sha-256"
@@ -42,7 +42,7 @@ class Settings:
     REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
 
     # ------------------------------------------------------------------
-    # Authentication — no defaults; must be supplied at runtime
+    # Authentication - no defaults; must be supplied at runtime
     # ------------------------------------------------------------------
     FULL_PASSWORD: str = os.getenv("FULL_PASSWORD", "")
     ADMIN_KEY: str = os.getenv("ADMIN_KEY", "")
@@ -129,7 +129,7 @@ class Settings:
 
         if not cls.OPENAI_API_KEY:
             logger.warning(
-                "OPENAI_API_KEY is not set — AI features will be unavailable."
+                "OPENAI_API_KEY is not set - AI features will be unavailable."
             )
 
 
