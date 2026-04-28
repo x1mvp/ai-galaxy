@@ -1,4 +1,4 @@
-﻿<<<<<< HEAD
+﻿<<< HEAD
 ﻿"""
 x1mvp Portfolio - FastAPI Application Factory
 Production-ready API with multiple service modules

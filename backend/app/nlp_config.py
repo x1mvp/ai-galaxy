@@ -1,4 +1,4 @@
-﻿""NLP Service Configuration"""
+﻿LP Service Configuration"""
 
 import os
 from typing import List

@@ -1,4 +1,4 @@
-﻿""
+﻿
 x1mvp Portfolio — FastAPI application factory.
 Owns:
   - Logging configuration (file + stream, directory created safely)

@@ -1,4 +1,4 @@
-﻿""Application configuration — all values sourced from environment variables."""
+﻿pplication configuration — all values sourced from environment variables."""
 
 import os
 import logging

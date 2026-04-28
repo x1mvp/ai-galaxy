@@ -1,4 +1,4 @@
-﻿""
+﻿
 Tests for Clinical Analytics module endpoints.
 """
 
