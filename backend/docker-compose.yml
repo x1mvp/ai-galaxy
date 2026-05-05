@@ -1,57 +1,40 @@
+# docker-compose.yml
 version: '3.8'
 
 services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    environment:
-      POSTGRES_DB: portfolio
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_HOST_AUTH_METHOD: trust
+  api:
+    build: .
     ports:
-      - "5432:5432"
+      - "8000:8000"
+    environment:
+      - TESTING=false
+      - LOG_LEVEL=INFO
+      - NLP_MODEL_NAME=cardiffnlp/twitter-roberta-base-sentiment-latest
+      - NLP_DEVICE=cuda
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init-db:/docker-entrypoint-initdb.d
-      - ./backend/init.sql:/docker-entrypoint-initdb.d/init-db.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready", "-U", "postgres"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
+      - ./logs:/app/logs
+      - ./models:/app/models
+    depends_on:
+      - redis
+    restart: unless-stopped
+    
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  api:
-    build: ./backend
-    environment:
-      - FULL_PASSWORD=galaxy2026
-      - PGVECTOR_URL=postgresql://postgres:5432/postgres
-      - REDIS_URL=redis://redis:6379
-      - OPENAI_API_KEY=your_openai_api_key_here
+    restart: unless-stopped
+    
+  nginx:
+    image: nginx:alpine
     ports:
-      - "8000:8000"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - api
+    restart: unless-stopped
 
 volumes:
-  postgres_data:
-  redis_data:
+  logs:
+  models:
