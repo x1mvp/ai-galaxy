@@ -1,7 +1,6 @@
 # backend/app/routers/__init__.py
-"""Router imports for the x1mvp Portfolio API"""
+"""Router imports for AI Galaxy API"""
 
-# Import all routers to make them available
 from .crm import router as crm_router
 from .fraud import router as fraud_router
 from .clinical import router as clinical_router
