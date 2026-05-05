@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.9, 3.10, 3.11]
+        python-version: [3.9, "3.10", 3.11]
 
     steps:
     - uses: actions/checkout@v3
@@ -25,20 +25,57 @@ jobs:
     - name: Cache pip dependencies
       uses: actions/cache@v3
       with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        path: |
+          ~/.cache/pip
+          ~/.cache/torch
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-
+          ${{ runner.os }}-torch-
     
-    - name: Install dependencies
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          curl \
+          git \
+          && rm -rf /var/lib/apt/lists/*
+    
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest pytest-cov pytest-mock torch transformers
+        
+        # Install dev dependencies if available
+        if [ -f requirements-dev.txt ]; then
+          pip install -r requirements-dev.txt
+        fi
     
-    - name: Run tests with coverage
+    - name: Verify installation
       run: |
-        TESTING=1 pytest --cov=app --cov-report=xml --cov-report=html
+        python -c "import fastapi, torch, transformers"
+        python -c "import app.main"
+    
+    - name: Run linting
+      run: |
+        # Run basic linting if tools are available
+        if command -v black &> /dev/null; then
+          black --check .
+        fi
+        
+        if command -v flake8 &> /dev/null; then
+          flake8 .
+        fi
+    
+    - name: Run tests
+      run: |
+        TESTING=1 pytest \
+          --cov=app \
+          --cov-report=xml \
+          --cov-report=html \
+          --cov-fail-under=80 \
+          -v
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -46,3 +83,4 @@ jobs:
         file: ./coverage.xml
         flags: unittests
         name: codecov-umbrella
+        fail_ci_if_error: false
