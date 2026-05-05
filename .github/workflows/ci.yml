@@ -1,33 +1,69 @@
-name: CI
+# .github/workflows/ci.yml
+name: Continuous Integration
 
 on:
   push:
-    branches: [main]
+    branches: [ main, develop ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      TESTING: "true"
-      ONNX_MODEL_PATH: "/nonexistent/bert.onnx"
+    strategy:
+      matrix:
+        python-version: [3.9, "3.10", 3.11]
+
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: backend/requirements.txt
-
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-
-      - name: Install dependencies
-        run: pip install -r backend/requirements.txt
-
-      - name: Run tests
-        run: |
-          cd backend
-          pytest tests/ -v --no-cov
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.cache/torch
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          ${{ runner.os }}-torch-
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential curl git
+    
+    - name: Install Python dependencies
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run linting
+      working-directory: ./backend
+      run: |
+        # Basic linting checks
+        python -m py_compile app/main.py
+        python -m py_compile app/nlp.py
+        python -m py_compile app/middleware.py
+    
+    - name: Run tests
+      working-directory: ./backend
+      run: |
+        TESTING=1 pytest \
+          --cov=app \
+          --cov-report=xml \
+          --cov-report=html \
+          -v
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./backend/coverage.xml
+        flags: unittests
+        fail_ci_if_error: false
