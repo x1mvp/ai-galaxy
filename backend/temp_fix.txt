@@ -1,5 +1,0 @@
-﻿# =============================================================================
-# EXCEPTION HANDLERS (These belong to the FastAPI app, not router)
-# =============================================================================
-# NOTE: Exception handlers have been removed from the router
-# They should be added to the main FastAPI app in main.py
