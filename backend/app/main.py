@@ -1,30 +1,12 @@
+# backend/app/main.py
 """
-backend/app/main.py
-x1mvp Portfolio - FastAPI application factory.
-
-Original fixes (from previous audit):
-  - Logging basicConfig indented correctly inside _configure_logging()
-  - Logger created after _configure_logging() so it inherits root config
-  - lifespan defined before FastAPI() to avoid NameError
-  - CORS wildcard + credentials replaced with explicit origin list
-  - All four routers registered (CRM, Fraud, Clinical, NLP)
-  - Health endpoints restored for Cloud Run startup probe
-
-New fixes (this revision):
-  C1  model_manager deferred inside lifespan() - TestClient ALSO enters
-      lifespan, so the crash still happened in CI. Moved back to top-level
-      import; TESTING=true guard in load() handles the CI case correctly.
-  C2  import asyncio was at the bottom of the file, used above it.
-      Also asyncio.get_event_loop() is deprecated in Python 3.10+ and
-      loop.time() belongs on the loop object, not the asyncio module.
-  H1  router.exception_handler() does not exist on APIRouter - AttributeError
-      at import time. Handlers moved to app level here in main.py.
-  M1  Fixed middleware order, removed duplicates, added proper imports
+x1mvp Portfolio - FastAPI Application Factory
+Production-ready API with multiple service modules
 """
 
 from __future__ import annotations
 
-import asyncio                          # FIX C2: top of file
+import asyncio
 import logging
 import os
 import sys
@@ -37,19 +19,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 
-# FIX C1: top-level import is correct and safe.
-# model_manager.load() calls ModelConfig.validate() which has a TESTING guard:
-#   if os.getenv("TESTING") == "true": return   - returns immediately in CI
-# Deferring this import inside lifespan() does NOT help because
-# TestClient(app) also enters the lifespan context manager during tests.
+# Fix: Import from correct location
 from app.nlp import model_manager
-
+from app.core.config import settings
 
 # =============================================================================
 # Logging
 # =============================================================================
 def _configure_logging() -> None:
-    log_dir = Path(__file__).parent / "logs"
+    log_dir = Path(__file__).parent.parent / "logs"  # Go up one level from app/
     log_dir.mkdir(parents=True, exist_ok=True)
 
     handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
@@ -71,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# Lifespan - must be defined BEFORE FastAPI() references it
+# Lifespan
 # =============================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -97,10 +75,7 @@ app = FastAPI(
 
 
 # =============================================================================
-# FIX H1 - Exception handlers on the app, not the router
-# APIRouter has no .exception_handler() method. The previous code called
-# @router.exception_handler() in nlp.py which raised AttributeError at
-# import time, crashing before any route was registered.
+# Exception Handlers
 # =============================================================================
 @app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError):
@@ -119,7 +94,7 @@ async def runtime_error_handler(request: Request, exc: RuntimeError):
 
 
 # =============================================================================
-# MIDDLEWARE STACK - FIX M1: CORRECT ORDER AND IMPORTS
+# Middleware Stack
 # =============================================================================
 # Get allowed origins from environment
 _allowed_origins = os.getenv(
@@ -139,8 +114,7 @@ app.add_middleware(
 # 2. TrustedHost middleware
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 
-# 3. Custom middleware - ORDER MATTERS! 
-#    Try to import, but handle gracefully if not available
+# 3. Custom middleware
 try:
     from app.middleware import SecurityHeadersMiddleware, RequestLoggingMiddleware, PerformanceMiddleware
     
@@ -157,9 +131,8 @@ try:
     
 except ImportError as e:
     logger.warning(f"⚠️  Custom middleware not available: {e}")
-    logger.info("   To enable custom middleware: create app/middleware.py")
 
-# 4. Rate limiting (optional - wraps everything)
+# 4. Rate limiting (optional)
 try:
     from slowapi import Limiter, _rate_limit_exceeded_handler
     from slowapi.util import get_remote_address
@@ -173,11 +146,10 @@ try:
     
 except ImportError as e:
     logger.warning(f"⚠️  Rate limiting dependencies not installed: {e}")
-    logger.info("   To enable rate limiting: pip install slowapi redis")
 
 
 # =============================================================================
-# Routers - MUST COME AFTER MIDDLEWARE
+# Routers
 # =============================================================================
 try:
     from app.routers import crm, fraud, clinical, nlp  # noqa: E402
@@ -194,14 +166,11 @@ except ImportError as exc:
 
 
 # =============================================================================
-# Health endpoints - required for Cloud Run startup + liveness probes
+# Health endpoints
 # =============================================================================
 @app.get("/healthz", tags=["Health"])
 async def health_check():
     """Liveness probe used by Cloud Run and uptime monitors."""
-    # FIX C2: asyncio.get_event_loop() is deprecated in Python 3.10+.
-    # Correct API inside an async function is asyncio.get_running_loop().
-    # loop.time() gives a monotonic float uptime counter.
     loop = asyncio.get_running_loop()
     return {
         "status": "healthy",
