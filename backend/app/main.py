@@ -1,8 +1,3 @@
-<<< HEAD
--"""
-x1mvp Portfolio - FastAPI Application Factory
-Production-ready API with multiple service modules
-=======
 """
 backend/app/main.py
 x1mvp Portfolio - FastAPI application factory.
@@ -24,15 +19,12 @@ New fixes (this revision):
       loop.time() belongs on the loop object, not the asyncio module.
   H1  router.exception_handler() does not exist on APIRouter - AttributeError
       at import time. Handlers moved to app level here in main.py.
->>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
+  M1  Fixed middleware order, removed duplicates, added proper imports
 """
 
 from __future__ import annotations
 
-<<<<<<< HEAD
-=======
 import asyncio                          # FIX C2: top of file
->>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
 import logging
 import os
 import sys
@@ -40,18 +32,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 
-<<<<<<< HEAD
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-
-# Configure logging BEFORE other imports
-def _configure_logging() -> None:
-    log_dir = Path(__file__).parent / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    handlers = [logging.StreamHandler(sys.stdout)]
-=======
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -73,7 +53,6 @@ def _configure_logging() -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
 
     handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
->>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
 
     if os.getenv("LOG_TO_FILE", "false").lower() == "true":
         handlers.append(
@@ -81,47 +60,11 @@ def _configure_logging() -> None:
         )
 
     logging.basicConfig(
-<<<<<<< HEAD
-        level=logging.INFO,
-=======
         level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
->>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=handlers,
         force=True,
     )
-
-<<<<<<< HEAD
-_configure_logging()
-logger = logging.getLogger(__name__)
-
-# Lifespan context manager
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    logger.info("-- Starting up - loading services")
-    
-    # Load models if available
-    try:
-        from app.routers.nlp import model_manager
-        model_manager.load()
-    except ImportError:
-        logger.warning("NLP module not available, skipping model loading")
-    except Exception as e:
-        logger.error(f"Failed to load NLP model: {e}")
-    
-    yield
-    logger.info("-- Shutting down - unloading models")
-    
-    try:
-        from app.routers.nlp import model_manager
-        model_manager.unload()
-    except ImportError:
-        pass
-    except Exception as e:
-        logger.error(f"Failed to unload NLP model: {e}")
-
-# Create FastAPI app
-=======
 
 _configure_logging()
 logger = logging.getLogger(__name__)
@@ -142,7 +85,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # =============================================================================
 # App
 # =============================================================================
->>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
 app = FastAPI(
     title="x1mvp Portfolio API",
     description="AI-powered data engineering portfolio with real-time demos",
@@ -153,14 +95,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-<<<<<<< HEAD
-# Add CORS middleware
-_allowed_origins = os.getenv(
-    "ALLOWED_ORIGINS",
-    "https://x1mvp.github.io,http://localhost:3000,http://localhost:8080"
-).split(",")
-
-=======
 
 # =============================================================================
 # FIX H1 - Exception handlers on the app, not the router
@@ -185,57 +119,65 @@ async def runtime_error_handler(request: Request, exc: RuntimeError):
 
 
 # =============================================================================
-# Middleware
+# MIDDLEWARE STACK - FIX M1: CORRECT ORDER AND IMPORTS
 # =============================================================================
+# Get allowed origins from environment
 _allowed_origins = os.getenv(
     "ALLOWED_ORIGINS",
     "https://x1mvp.github.io,http://localhost:3000,http://localhost:8080",
 ).split(",")
 
->>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
+# 1. CORS middleware (outermost)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=True,
-<<<<<<< HEAD
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
-
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["*"],
-)
-
-# Import and register routers
-try:
-    from app.routers import crm, fraud, clinical, nlp
-    
-    app.include_router(crm.router, prefix="/CRM", tags=["CRM"])
-    app.include_router(fraud.router, prefix="/Fraud", tags=["Fraud Detection"])
-    app.include_router(clinical.router, prefix="/Clinical", tags=["Clinical"])
-    app.include_router(nlp.router, prefix="/NLP", tags=["NLP"])
-    
-    logger.info("- All service routers registered")
-    
-except ImportError as e:
-    logger.error(f"Failed to import some routers: {e}")
-    logger.warning("Continuing with available routers")
-
-# Health endpoints
-@app.get("/healthz", tags=["Health"])
-async def health_check():
-    """Liveness probe used by Cloud Run and uptime monitors."""
-=======
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
+# 2. TrustedHost middleware
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+
+# 3. Custom middleware - ORDER MATTERS! 
+#    Try to import, but handle gracefully if not available
+try:
+    from app.middleware import SecurityHeadersMiddleware, RequestLoggingMiddleware, PerformanceMiddleware
+    
+    # Security headers first
+    app.add_middleware(SecurityHeadersMiddleware)
+    
+    # Request logging (outer layer)
+    app.add_middleware(RequestLoggingMiddleware)
+    
+    # Performance monitoring (inner layer)
+    app.add_middleware(PerformanceMiddleware)
+    
+    logger.info("✅ Custom middleware stack enabled")
+    
+except ImportError as e:
+    logger.warning(f"⚠️  Custom middleware not available: {e}")
+    logger.info("   To enable custom middleware: create app/middleware.py")
+
+# 4. Rate limiting (optional - wraps everything)
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    
+    logger.info("✅ Rate limiting middleware enabled")
+    
+except ImportError as e:
+    logger.warning(f"⚠️  Rate limiting dependencies not installed: {e}")
+    logger.info("   To enable rate limiting: pip install slowapi redis")
 
 
 # =============================================================================
-# Routers
+# Routers - MUST COME AFTER MIDDLEWARE
 # =============================================================================
 try:
     from app.routers import crm, fraud, clinical, nlp  # noqa: E402
@@ -261,20 +203,14 @@ async def health_check():
     # Correct API inside an async function is asyncio.get_running_loop().
     # loop.time() gives a monotonic float uptime counter.
     loop = asyncio.get_running_loop()
->>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
     return {
         "status": "healthy",
         "version": app.version,
         "services": ["crm", "fraud", "clinical", "nlp"],
-<<<<<<< HEAD
-    }
-
-=======
         "uptime": loop.time(),
     }
 
 
->>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
 @app.get("/", tags=["Health"])
 async def root():
     """Root endpoint - satisfies Cloud Run startup probe."""
@@ -286,9 +222,5 @@ async def root():
         "endpoints": ["/CRM", "/Fraud", "/Clinical", "/NLP"],
     }
 
-<<<<<<< HEAD
-logger.info("- FastAPI application configured")
-=======
 
 logger.info("FastAPI application configured - ready to serve")
->>>>>>> eced1bb985ecd4aa5dd6dd7b1e59addd4a4b9e4b
