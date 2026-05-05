@@ -1,0 +1,46 @@
+# k8s/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nlp-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nlp-service
+  template:
+    metadata:
+      labels:
+        app: nlp-service
+    spec:
+      containers:
+      - name: nlp-service
+        image: nlp-service:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: NLP_MODEL_NAME
+          value: "cardiffnlp/twitter-roberta-base-sentiment-latest"
+        - name: NLP_DEVICE
+          value: "cuda"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+            nvidia.com/gpu: 1
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+            nvidia.com/gpu: 1
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
