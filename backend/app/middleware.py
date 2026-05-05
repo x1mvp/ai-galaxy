@@ -1,9 +1,10 @@
 """
-app/middleware.py - Custom middleware for performance monitoring and logging
+backend/app/middleware.py - Custom middleware for performance monitoring and logging
 """
 
 import time
 import logging
+import uuid
 from typing import Callable
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -52,8 +53,6 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Detailed request/response logging middleware"""
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        import uuid
-        
         # Generate unique request ID
         request_id = str(uuid.uuid4())
         request.state.request_id = request_id
@@ -61,8 +60,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         # Log incoming request
         logger.info(
             f"REQ_START [{request_id}]: {request.method} {request.url.path} "
-            f"from {request.client.host if request.client else 'unknown'} "
-            f"- Headers: {dict(request.headers)}"
+            f"from {request.client.host if request.client else 'unknown'}"
         )
         
         start_time = time.time()
@@ -75,8 +73,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             logger.info(
                 f"REQ_END [{request_id}]: {request.method} {request.url.path} - "
                 f"Status: {response.status_code} - "
-                f"Time: {process_time:.3f}s - "
-                f"Size: {len(response.body) if hasattr(response, 'body') else 'unknown'} bytes"
+                f"Time: {process_time:.3f}s"
             )
             
             return response
